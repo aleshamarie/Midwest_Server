@@ -1,0 +1,139 @@
+const Product = require('../models/Product');
+
+// Upload image as base64 directly
+async function uploadImageBase64(req, res) {
+  const { productId, imageData, mimeType } = req.body;
+  
+  if (!productId) {
+    return res.status(400).json({ message: 'Product ID is required' });
+  }
+  
+  if (!imageData) {
+    return res.status(400).json({ message: 'Image data is required' });
+  }
+  
+  try {
+    // Validate base64 data
+    const base64Regex = /^data:image\/(jpeg|jpg|png|gif|webp);base64,/;
+    let cleanImageData = imageData;
+    let detectedMimeType = mimeType || 'image/jpeg';
+    
+    if (base64Regex.test(imageData)) {
+      // Extract base64 part from data URL
+      cleanImageData = imageData.split(',')[1];
+      const match = imageData.match(/^data:image\/([a-zA-Z]+);base64,/);
+      if (match) {
+        detectedMimeType = `image/${match[1]}`;
+      }
+    }
+    
+    // Validate base64 format
+    try {
+      Buffer.from(cleanImageData, 'base64');
+    } catch (error) {
+      return res.status(400).json({ message: 'Invalid base64 image data' });
+    }
+    
+    // Update product with base64 image
+    const product = await Product.findByIdAndUpdate(
+      productId,
+      {
+        image: cleanImageData,
+        image_mime_type: detectedMimeType
+      },
+      { new: true, select: 'name image image_mime_type image_url' }
+    );
+    
+    if (!product) {
+      return res.status(404).json({ message: 'Product not found' });
+    }
+    
+    res.json({
+      message: 'Image uploaded successfully',
+      product: {
+        id: product._id,
+        name: product.name,
+        image_url: product.image_url,
+        has_image: !!product.image
+      }
+    });
+    
+  } catch (error) {
+    console.error('Error uploading base64 image:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+}
+
+// Get image as base64
+async function getImageBase64(req, res) {
+  const { productId } = req.params;
+  
+  if (!productId) {
+    return res.status(400).json({ message: 'Product ID is required' });
+  }
+  
+  try {
+    const product = await Product.findById(productId).select('image image_mime_type');
+    
+    if (!product) {
+      return res.status(404).json({ message: 'Product not found' });
+    }
+    
+    if (!product.image) {
+      return res.status(404).json({ message: 'Product has no image' });
+    }
+    
+    res.json({
+      productId: product._id,
+      imageData: product.image,
+      mimeType: product.image_mime_type,
+      dataUrl: `data:${product.image_mime_type || 'image/jpeg'};base64,${product.image}`
+    });
+    
+  } catch (error) {
+    console.error('Error getting base64 image:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+}
+
+// Delete image
+async function deleteImageBase64(req, res) {
+  const { productId } = req.params;
+  
+  if (!productId) {
+    return res.status(400).json({ message: 'Product ID is required' });
+  }
+  
+  try {
+    const product = await Product.findByIdAndUpdate(
+      productId,
+      {
+        $unset: { image: 1, image_mime_type: 1 }
+      },
+      { new: true, select: 'name' }
+    );
+    
+    if (!product) {
+      return res.status(404).json({ message: 'Product not found' });
+    }
+    
+    res.json({
+      message: 'Image deleted successfully',
+      product: {
+        id: product._id,
+        name: product.name,
+        has_image: false
+      }
+    });
+    
+  } catch (error) {
+    console.error('Error deleting image:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+}
+
+module.exports = {
+  uploadImageBase64,
+  getImageBase64,
+  deleteImageBase64
+};
