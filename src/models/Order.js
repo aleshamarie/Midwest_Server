@@ -3,7 +3,8 @@ const mongoose = require('mongoose');
 const orderSchema = new mongoose.Schema({
   order_code: {
     type: String,
-    required: true
+    required: true,
+    unique: true
   },
   name: {
     type: String,
@@ -51,6 +52,5 @@ const orderSchema = new mongoose.Schema({
 
 // Index for device_id queries
 orderSchema.index({ device_id: 1 });
-orderSchema.index({ order_code: 1 }, { unique: true });
 
 module.exports = mongoose.model('Order', orderSchema);

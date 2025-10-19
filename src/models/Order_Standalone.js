@@ -56,6 +56,5 @@ const orderSchema = new mongoose.Schema({
 
 // Index for device_id queries
 orderSchema.index({ device_id: 1 });
-orderSchema.index({ order_code: 1 }, { unique: true });
 
 module.exports = mongoose.model('Order_Standalone', orderSchema);
