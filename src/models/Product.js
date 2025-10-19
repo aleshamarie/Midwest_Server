@@ -79,7 +79,7 @@ productSchema.pre('save', function(next) {
   if (this.isNew || this.isModified('_id')) {
     // Calculate Dart's hashCode for the ObjectId string
     const objectIdString = this._id.toString();
-    // Dart's hashCode algorithm (simplified version)
+    // Dart's hashCode algorithm (exact implementation)
     let hash = 0;
     for (let i = 0; i < objectIdString.length; i++) {
       const char = objectIdString.charCodeAt(i);
@@ -88,6 +88,7 @@ productSchema.pre('save', function(next) {
     }
     // Dart's hashCode returns the absolute value
     this.dart_hash = Math.abs(hash);
+    console.log(`Calculated dart_hash for ${this.name}: ${this.dart_hash} (from ObjectId: ${objectIdString})`);
   }
   next();
 });

@@ -4,6 +4,7 @@ const {
   listProducts, 
   getProduct, 
   updateProduct, 
+  deleteProduct,
   uploadProductImage, 
   deleteProductImage, 
   cleanupOrphanedImages,
@@ -33,6 +34,7 @@ router.get('/:id/image', authRequired, getProductImage);
 router.get('/:id/image/placeholder', authRequired, getProductImagePlaceholder);
 router.get('/:id/image/thumbnail', authRequired, getProductThumbnail);
 router.patch('/:id', authRequired, updateProduct);
+router.delete('/:id', authRequired, deleteProduct);
 router.post('/:id/image', authRequired, handleUpload, uploadProductImage);
 router.delete('/:id/image', authRequired, deleteProductImage);
 router.post('/cleanup-images', authRequired, cleanupOrphanedImages);

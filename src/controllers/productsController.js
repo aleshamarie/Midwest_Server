@@ -405,10 +405,37 @@ async function getLowStockItems(req, res) {
   }
 }
 
+async function deleteProduct(req, res) {
+  const id = req.params.id;
+  if (!id) return res.status(400).json({ message: 'Invalid id' });
+  
+  // Validate ObjectId format
+  if (!isValidObjectId(id)) {
+    return res.status(400).json({ message: 'Invalid product ID format' });
+  }
+  
+  try {
+    const product = await Product.findByIdAndDelete(id);
+    if (!product) return res.status(404).json({ message: 'Product not found' });
+    
+    res.json({ 
+      message: 'Product deleted successfully',
+      deletedProduct: {
+        id: product._id,
+        name: product.name
+      }
+    });
+  } catch (error) {
+    console.error('Error deleting product:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+}
+
 module.exports = { 
   listProducts, 
   getProduct, 
   updateProduct, 
+  deleteProduct,
   uploadProductImage, 
   deleteProductImage, 
   cleanupOrphanedImages,

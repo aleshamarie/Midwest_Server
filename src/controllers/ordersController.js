@@ -294,6 +294,10 @@ async function createOrder(req, res) {
             // Flutter app sends hash of MongoDB ObjectId as integer
             console.log(`Looking for product with dart_hash: ${productId}`);
             
+            // Debug: Show what dart_hash values exist in the database
+            const existingHashes = await Product.find({}).select('name dart_hash').limit(10);
+            console.log('Existing dart_hash values in database:', existingHashes.map(p => `${p.name}: ${p.dart_hash}`));
+            
             // First try to find by dart_hash field
             let matchingProduct = await Product.findOne({ dart_hash: productId }).select('_id name price');
             
