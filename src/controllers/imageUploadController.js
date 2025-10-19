@@ -12,6 +12,16 @@ async function uploadImageBase64(req, res) {
     return res.status(400).json({ message: 'Image data is required' });
   }
   
+  // Check payload size (base64 images are ~33% larger than original)
+  const payloadSize = Buffer.byteLength(imageData, 'utf8');
+  const maxSize = 15 * 1024 * 1024; // 15MB limit for base64 payload
+  
+  if (payloadSize > maxSize) {
+    return res.status(400).json({ 
+      message: `Image too large. Maximum size is 15MB. Current size: ${Math.round(payloadSize / 1024 / 1024)}MB` 
+    });
+  }
+  
   try {
     // Validate base64 data
     const base64Regex = /^data:image\/(jpeg|jpg|png|gif|webp);base64,/;
@@ -29,7 +39,11 @@ async function uploadImageBase64(req, res) {
     
     // Validate base64 format
     try {
-      Buffer.from(cleanImageData, 'base64');
+      const imageBuffer = Buffer.from(cleanImageData, 'base64');
+      // Additional check: ensure the decoded image isn't too large
+      if (imageBuffer.length > 10 * 1024 * 1024) { // 10MB decoded limit
+        return res.status(400).json({ message: 'Decoded image too large. Maximum size is 10MB.' });
+      }
     } catch (error) {
       return res.status(400).json({ message: 'Invalid base64 image data' });
     }
