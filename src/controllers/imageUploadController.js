@@ -14,11 +14,12 @@ async function uploadImageBase64(req, res) {
   
   // Check payload size (base64 images are ~33% larger than original)
   const payloadSize = Buffer.byteLength(imageData, 'utf8');
-  const maxSize = 15 * 1024 * 1024; // 15MB limit for base64 payload
+  // Reduced limit for deployed servers (Render.com, Heroku, etc. have ~1MB limits)
+  const maxSize = 1024 * 1024; // 1MB limit for base64 payload on deployed servers
   
   if (payloadSize > maxSize) {
     return res.status(400).json({ 
-      message: `Image too large. Maximum size is 15MB. Current size: ${Math.round(payloadSize / 1024 / 1024)}MB` 
+      message: `Image too large. Maximum size is 1MB for deployed server. Current size: ${Math.round(payloadSize / 1024)}KB. Please compress your image or use a smaller file.` 
     });
   }
   
@@ -41,8 +42,8 @@ async function uploadImageBase64(req, res) {
     try {
       const imageBuffer = Buffer.from(cleanImageData, 'base64');
       // Additional check: ensure the decoded image isn't too large
-      if (imageBuffer.length > 10 * 1024 * 1024) { // 10MB decoded limit
-        return res.status(400).json({ message: 'Decoded image too large. Maximum size is 10MB.' });
+      if (imageBuffer.length > 750 * 1024) { // 750KB decoded limit for deployed servers
+        return res.status(400).json({ message: 'Decoded image too large. Maximum size is 750KB for deployed server.' });
       }
     } catch (error) {
       return res.status(400).json({ message: 'Invalid base64 image data' });
