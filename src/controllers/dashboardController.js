@@ -163,8 +163,8 @@ async function getSalesOverview(_req, res) {
           instore: 0 // Set to 0 since we don't have separate tracking in the summary
         });
       } else {
-        result.push({ 
-          day: key, 
+      result.push({ 
+        day: key, 
           online: 0, 
           instore: 0 
         });
@@ -300,6 +300,8 @@ async function manualAggregateToday(_req, res) {
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
     
+    console.log('Looking for orders between:', today.toISOString(), 'and', tomorrow.toISOString());
+    
     // Get orders from today
     const orders = await Order.find({
       createdAt: {
@@ -308,11 +310,32 @@ async function manualAggregateToday(_req, res) {
       }
     }).populate('items.product_id');
     
+    console.log('Found orders in database:', orders.length);
+    orders.forEach(order => {
+      console.log('Order:', {
+        id: order._id,
+        createdAt: order.createdAt,
+        totalPrice: order.totalPrice,
+        net_total: order.net_total
+      });
+    });
+    
+    // Also check total orders in database for debugging
+    const totalOrdersInDB = await Order.countDocuments();
+    console.log('Total orders in database:', totalOrdersInDB);
+    
     if (orders.length === 0) {
       return res.json({
         message: 'No orders found for today',
         processedOrders: 0,
-        date: today.toDateString()
+        date: today.toDateString(),
+        totalOrdersInDB: totalOrdersInDB,
+        debugInfo: {
+          searchRange: {
+            from: today.toISOString(),
+            to: tomorrow.toISOString()
+          }
+        }
       });
     }
     
@@ -361,7 +384,14 @@ async function manualAggregateToday(_req, res) {
       date: today.toDateString(),
       grossSales: grossSales,
       netSales: netSales,
-      grossProfit: grossProfit
+      grossProfit: grossProfit,
+      totalOrdersInDB: totalOrdersInDB,
+      debugInfo: {
+        searchRange: {
+          from: today.toISOString(),
+          to: tomorrow.toISOString()
+        }
+      }
     });
     
   } catch (error) {
