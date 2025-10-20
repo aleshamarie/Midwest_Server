@@ -290,6 +290,86 @@ async function aggregateSalesData(_req, res) {
   }
 }
 
-module.exports = { getMetrics, getSalesOverview, aggregateSalesData };
+async function manualAggregateToday(_req, res) {
+  try {
+    console.log('Manual aggregation triggered for today...');
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    
+    // Get orders from today
+    const orders = await Order.find({
+      createdAt: {
+        $gte: today,
+        $lt: tomorrow
+      }
+    }).populate('items.product_id');
+    
+    if (orders.length === 0) {
+      return res.json({
+        message: 'No orders found for today',
+        processedOrders: 0,
+        date: today.toDateString()
+      });
+    }
+    
+    // Calculate summary data
+    let grossSales = 0;
+    let refunds = 0;
+    let discounts = 0;
+    let costOfGoods = 0;
+    let taxes = 0;
+    
+    for (const order of orders) {
+      grossSales += order.totalPrice;
+      discounts += order.discount;
+      
+      for (const item of order.items) {
+        if (item.product_id && item.product_id.cost) {
+          costOfGoods += item.quantity * item.product_id.cost;
+        }
+      }
+    }
+    
+    const netSales = grossSales - discounts - refunds;
+    const grossProfit = netSales - costOfGoods;
+    const marginPercent = netSales === 0 ? 0 : (grossProfit / netSales) * 100;
+    
+    // Update or create daily summary
+    await SalesDailySummary.findOneAndUpdate(
+      { summary_date: today },
+      {
+        summary_date: today,
+        gross_sales: grossSales,
+        refunds: refunds,
+        discounts: discounts,
+        net_sales: netSales,
+        cost_of_goods: costOfGoods,
+        gross_profit: grossProfit,
+        margin_percent: marginPercent,
+        taxes: taxes
+      },
+      { upsert: true, new: true }
+    );
+    
+    res.json({
+      message: 'Today\'s sales data aggregated successfully',
+      processedOrders: orders.length,
+      date: today.toDateString(),
+      grossSales: grossSales,
+      netSales: netSales,
+      grossProfit: grossProfit
+    });
+    
+  } catch (error) {
+    console.error('Error in manual aggregation:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+}
+
+module.exports = { getMetrics, getSalesOverview, aggregateSalesData, manualAggregateToday };
 
 
