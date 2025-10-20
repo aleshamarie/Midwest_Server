@@ -7,7 +7,7 @@ const mongoose = require('mongoose');
 const orderItemSchema = new mongoose.Schema({
   order_id: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Order',
+    ref: 'Order_Standalone',
     required: true,
     index: true // For efficient queries
   },

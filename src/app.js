@@ -40,8 +40,7 @@ const startServer = async () => {
       // MongoDB daily automation: roll up yesterday's orders into sales_daily_summary at 00:05
       try {
         const schedule = require('node-schedule');
-        const Order = require('./models/Order_Standalone');
-        const OrderItem = require('./models/OrderItem');
+        const Order = require('./models/Order');
         const Product = require('./models/Product');
         const SalesDailySummary = require('./models/SalesDailySummary');
         
@@ -60,12 +59,7 @@ const startServer = async () => {
                 $gte: yesterday,
                 $lt: today
               }
-            });
-            
-            // Get order items for these orders
-            const orderIds = orders.map(order => order._id);
-            const orderItems = await OrderItem.find({ order_id: { $in: orderIds } })
-              .populate('product_id');
+            }).populate('items.product_id');
             
             if (orders.length === 0) {
               console.log('[scheduler] No orders found for yesterday');
@@ -82,12 +76,11 @@ const startServer = async () => {
             for (const order of orders) {
               grossSales += order.totalPrice;
               discounts += order.discount;
-            }
-            
-            // Calculate cost of goods from order items
-            for (const item of orderItems) {
-              if (item.product_id && item.product_id.cost) {
-                costOfGoods += item.quantity * item.product_id.cost;
+              
+              for (const item of order.items) {
+                if (item.product_id && item.product_id.cost) {
+                  costOfGoods += item.quantity * item.product_id.cost;
+                }
               }
             }
             
