@@ -229,15 +229,15 @@ async function aggregateSalesData(_req, res) {
       const summaryDate = new Date(dayData._id);
       summaryDate.setHours(0, 0, 0, 0);
       
-      // Calculate cost of goods for this day
+      // Calculate cost of goods for this day using OrderItem collection
       let costOfGoods = 0;
-      for (const order of dayData.orders) {
-        if (order.items && order.items.length > 0) {
-          for (const item of order.items) {
-            if (item.product_id && item.product_id.cost) {
-              costOfGoods += item.quantity * item.product_id.cost;
-            }
-          }
+      const orderIds = dayData.orders.map(order => order._id);
+      const orderItems = await OrderItem.find({ order_id: { $in: orderIds } })
+        .populate('product_id');
+      
+      for (const item of orderItems) {
+        if (item.product_id && item.product_id.cost) {
+          costOfGoods += item.quantity * item.product_id.cost;
         }
       }
       
