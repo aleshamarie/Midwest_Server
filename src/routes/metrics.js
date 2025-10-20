@@ -1,6 +1,6 @@
 const express = require('express');
 const { authRequired } = require('../middleware/auth');
-const { getMetrics, getSalesOverview, aggregateSalesData, manualAggregateToday } = require('../controllers/dashboardController');
+const { getMetrics, getSalesOverview, aggregateSalesData, manualAggregateToday, syncClientOrders } = require('../controllers/dashboardController');
 
 const router = express.Router();
 
@@ -12,6 +12,8 @@ router.get('/sales-overview-public', getSalesOverview);
 router.post('/aggregate-sales', aggregateSalesData);
 // Manual aggregation for today's sales
 router.post('/aggregate-today', manualAggregateToday);
+// Debug endpoint to check database orders
+router.get('/sync-orders', syncClientOrders);
 
 module.exports = router;
 

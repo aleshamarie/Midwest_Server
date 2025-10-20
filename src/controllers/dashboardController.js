@@ -400,6 +400,53 @@ async function manualAggregateToday(_req, res) {
   }
 }
 
-module.exports = { getMetrics, getSalesOverview, aggregateSalesData, manualAggregateToday };
+async function syncClientOrders(_req, res) {
+  try {
+    console.log('Syncing client orders to server database...');
+    
+    // Get all orders from the database to see what we have
+    const allOrders = await Order.find({}).sort({ createdAt: -1 }).limit(10);
+    console.log('Recent orders in database:');
+    allOrders.forEach(order => {
+      console.log(`Order ${order.order_code || order._id}: ${order.createdAt} - $${order.net_total}`);
+    });
+    
+    // Get orders from today specifically
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    
+    const todayOrders = await Order.find({
+      createdAt: {
+        $gte: today,
+        $lt: tomorrow
+      }
+    });
+    
+    res.json({
+      message: 'Database sync information',
+      totalOrdersInDB: await Order.countDocuments(),
+      todayOrders: todayOrders.length,
+      recentOrders: allOrders.map(o => ({
+        id: o._id,
+        order_code: o.order_code,
+        createdAt: o.createdAt,
+        net_total: o.net_total,
+        status: o.status
+      })),
+      searchRange: {
+        from: today.toISOString(),
+        to: tomorrow.toISOString()
+      }
+    });
+    
+  } catch (error) {
+    console.error('Error syncing orders:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+}
+
+module.exports = { getMetrics, getSalesOverview, aggregateSalesData, manualAggregateToday, syncClientOrders };
 
 
