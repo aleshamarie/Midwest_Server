@@ -1,5 +1,6 @@
 const Order = require('../models/Order');
 const Product = require('../models/Product');
+const SalesDailySummary = require('../models/SalesDailySummary');
 
 async function getMetrics(_req, res) {
   try {
@@ -61,60 +62,49 @@ async function getMetrics(_req, res) {
 
 async function getSalesOverview(_req, res) {
   try {
-    // Last 7 days, aggregate totals by type
+    // Last 7 days from SalesDailySummary collection
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
     sevenDaysAgo.setHours(0, 0, 0, 0);
 
-    const rows = await Order.aggregate([
-      {
-        $match: {
-          createdAt: { $gte: sevenDaysAgo }
-        }
-      },
-      {
-        $group: {
-          _id: {
-            day: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
-            type: '$type'
-          },
-          total: { $sum: '$net_total' }
-        }
-      },
-      {
-        $group: {
-          _id: '$_id.day',
-          online_total: {
-            $sum: {
-              $cond: [{ $eq: ['$_id.type', 'Online'] }, '$total', 0]
-            }
-          },
-          instore_total: {
-            $sum: {
-              $cond: [{ $ne: ['$_id.type', 'Online'] }, '$total', 0]
-            }
-          }
-        }
-      },
-      {
-        $sort: { '_id': 1 }
-      }
-    ]);
+    // Fetch sales data from SalesDailySummary collection
+    const salesData = await SalesDailySummary.find({
+      summary_date: { $gte: sevenDaysAgo }
+    }).sort({ summary_date: 1 });
+
+    // Create a map for quick lookup
+    const salesMap = new Map();
+    salesData.forEach(item => {
+      const dateKey = item.summary_date.toISOString().slice(0, 10);
+      salesMap.set(dateKey, item);
+    });
 
     // Ensure 7 entries (fill missing days with zeros)
-    const map = new Map(rows.map(r => [r._id, r]));
     const result = [];
     for (let i = 6; i >= 0; i--) {
       const d = new Date();
       d.setDate(d.getDate() - i);
       const key = d.toISOString().slice(0, 10);
-      const item = map.get(key) || { online_total: 0, instore_total: 0 };
-      result.push({ 
-        day: key, 
-        online: Number(item.online_total || 0), 
-        instore: Number(item.instore_total || 0) 
-      });
+      const item = salesMap.get(key);
+      
+      if (item) {
+        // Use net_sales from the summary (this represents total sales for the day)
+        // For now, we'll show all sales as "online" since the summary doesn't distinguish
+        // In the future, you could modify the summary to track online vs in-store separately
+        result.push({ 
+          day: key, 
+          online: Number(item.net_sales || 0), 
+          instore: 0 // Set to 0 since we don't have separate tracking in the summary
+        });
+      } else {
+        result.push({ 
+          day: key, 
+          online: 0, 
+          instore: 0 
+        });
+      }
     }
+    
     res.json({ days: result });
   } catch (_e) {
     console.error('Error in getSalesOverview:', _e);
