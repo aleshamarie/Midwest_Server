@@ -2,7 +2,10 @@ const Product = require('../models/Product');
 
 // Upload image as base64 directly
 async function uploadImageBase64(req, res) {
-  const { productId, imageData, mimeType } = req.body;
+  // Handle both JSON and FormData requests
+  const productId = req.body.productId || req.params.id;
+  const imageData = req.body.imageData;
+  const mimeType = req.body.mimeType;
   
   if (!productId) {
     return res.status(400).json({ message: 'Product ID is required' });
@@ -11,6 +14,13 @@ async function uploadImageBase64(req, res) {
   if (!imageData) {
     return res.status(400).json({ message: 'Image data is required' });
   }
+  
+  console.log('Received image upload request:', {
+    productId,
+    imageDataLength: imageData ? imageData.length : 0,
+    contentType: req.headers['content-type'],
+    bodyKeys: Object.keys(req.body)
+  });
   
   // Check payload size (base64 images are ~33% larger than original)
   const payloadSize = Buffer.byteLength(imageData, 'utf8');
