@@ -37,32 +37,28 @@ const startServer = async () => {
     app.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
       
-      // MongoDB daily automation: roll up yesterday into sales_daily_summary at 00:05
+      // MongoDB hourly automation: roll up last hour's orders into sales_daily_summary every hour
       try {
         const schedule = require('node-schedule');
         const Order = require('./models/Order');
         const Product = require('./models/Product');
         const SalesDailySummary = require('./models/SalesDailySummary');
         
-        schedule.scheduleJob('5 0 * * *', async () => {
+        schedule.scheduleJob('0 * * * *', async () => {
           try {
-            const yesterday = new Date();
-            yesterday.setDate(yesterday.getDate() - 1);
-            yesterday.setHours(0, 0, 0, 0);
+            const now = new Date();
+            const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000); // 1 hour ago
             
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            
-            // Get orders from yesterday
+            // Get orders from the last hour
             const orders = await Order.find({
               createdAt: {
-                $gte: yesterday,
-                $lt: today
+                $gte: oneHourAgo,
+                $lt: now
               }
             }).populate('items.product_id');
             
             if (orders.length === 0) {
-              console.log('[scheduler] No orders found for yesterday');
+              console.log('[scheduler] No orders found in the last hour');
               return;
             }
             
@@ -88,24 +84,45 @@ const startServer = async () => {
             const grossProfit = netSales - costOfGoods;
             const marginPercent = netSales === 0 ? 0 : (grossProfit / netSales) * 100;
             
-            // Update or create daily summary
-            await SalesDailySummary.findOneAndUpdate(
-              { summary_date: yesterday },
-              {
-                summary_date: yesterday,
+            // Get today's date for the summary
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            
+            // Update or create daily summary (accumulate hourly data)
+            const existingSummary = await SalesDailySummary.findOne({ summary_date: today });
+            
+            if (existingSummary) {
+              // Add to existing daily totals
+              await SalesDailySummary.findOneAndUpdate(
+                { summary_date: today },
+                {
+                  $inc: {
+                    gross_sales: grossSales,
+                    refunds: refunds,
+                    discounts: discounts,
+                    net_sales: netSales,
+                    cost_of_goods: costOfGoods,
+                    gross_profit: grossProfit,
+                    taxes: taxes
+                  }
+                }
+              );
+            } else {
+              // Create new daily summary
+              await SalesDailySummary.create({
+                summary_date: today,
                 gross_sales: grossSales,
                 refunds: refunds,
                 discounts: discounts,
                 net_sales: netSales,
                 cost_of_goods: costOfGoods,
                 gross_profit: grossProfit,
-                margin_percent: marginPercent,
+                margin_percent: netSales === 0 ? 0 : (grossProfit / netSales) * 100,
                 taxes: taxes
-              },
-              { upsert: true, new: true }
-            );
+              });
+            }
             
-            console.log('[scheduler] sales_daily_summary updated for', yesterday.toDateString());
+            console.log('[scheduler] sales_daily_summary updated for', today.toDateString(), `(${orders.length} orders in last hour)`);
           } catch (error) {
             console.error('[scheduler] Error updating daily summary:', error);
           }
