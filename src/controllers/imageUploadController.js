@@ -2,25 +2,61 @@ const Product = require('../models/Product');
 
 // Upload image as base64 directly
 async function uploadImageBase64(req, res) {
-  // Handle both JSON and FormData requests
-  const productId = req.body.productId || req.params.id;
-  const imageData = req.body.imageData;
-  const mimeType = req.body.mimeType;
+  let productId;
+  let imageData;
+  let mimeType;
+
+  // Explicitly get productId from params for GET requests
+  if (req.method === 'GET') {
+    productId = req.params.id;
+    // For GET requests, imageData and mimeType are not expected in the body
+  } else { // For POST requests
+    productId = req.body.productId || req.params.id; // Keep existing logic for POST
+    imageData = req.body.imageData;
+    mimeType = req.body.mimeType;
+  }
   
   if (!productId) {
     return res.status(400).json({ message: 'Product ID is required' });
   }
   
+  console.log('Received image request:', {
+    productId,
+    method: req.method,
+    contentType: req.headers['content-type'],
+    params: req.params
+  });
+  
+  // Handle GET requests (fetching images)
+  if (req.method === 'GET') {
+    try {
+      const product = await Product.findById(productId).select('image image_mime_type');
+      
+      if (!product) {
+        return res.status(404).json({ message: 'Product not found' });
+      }
+      
+      if (!product.image) {
+        return res.status(404).json({ message: 'Product has no image' });
+      }
+      
+      res.json({
+        productId: product._id,
+        imageData: product.image,
+        mimeType: product.image_mime_type,
+        dataUrl: `data:${product.image_mime_type || 'image/jpeg'};base64,${product.image}`
+      });
+      return;
+    } catch (error) {
+      console.error('Error fetching base64 image:', error);
+      return res.status(500).json({ message: 'Server error' });
+    }
+  }
+  
+  // Handle POST requests (uploading images)
   if (!imageData) {
     return res.status(400).json({ message: 'Image data is required' });
   }
-  
-  console.log('Received image upload request:', {
-    productId,
-    imageDataLength: imageData ? imageData.length : 0,
-    contentType: req.headers['content-type'],
-    bodyKeys: Object.keys(req.body)
-  });
   
   // Check payload size (base64 images are ~33% larger than original)
   const payloadSize = Buffer.byteLength(imageData, 'utf8');
