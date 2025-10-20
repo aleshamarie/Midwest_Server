@@ -1,4 +1,5 @@
-const Order = require('../models/Order');
+const Order = require('../models/Order_Standalone');
+const OrderItem = require('../models/OrderItem');
 const Product = require('../models/Product');
 const SalesDailySummary = require('../models/SalesDailySummary');
 
@@ -308,7 +309,12 @@ async function manualAggregateToday(_req, res) {
         $gte: today,
         $lt: tomorrow
       }
-    }).populate('items.product_id');
+    });
+    
+    // Get order items for these orders
+    const orderIds = orders.map(order => order._id);
+    const orderItems = await OrderItem.find({ order_id: { $in: orderIds } })
+      .populate('product_id');
     
     console.log('Found orders in database:', orders.length);
     orders.forEach(order => {
@@ -349,11 +355,12 @@ async function manualAggregateToday(_req, res) {
     for (const order of orders) {
       grossSales += order.totalPrice;
       discounts += order.discount;
-      
-      for (const item of order.items) {
-        if (item.product_id && item.product_id.cost) {
-          costOfGoods += item.quantity * item.product_id.cost;
-        }
+    }
+    
+    // Calculate cost of goods from order items
+    for (const item of orderItems) {
+      if (item.product_id && item.product_id.cost) {
+        costOfGoods += item.quantity * item.product_id.cost;
       }
     }
     
