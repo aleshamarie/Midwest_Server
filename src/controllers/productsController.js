@@ -405,6 +405,55 @@ async function getLowStockItems(req, res) {
   }
 }
 
+async function createProduct(req, res) {
+  const { name, category, description, price, stock } = req.body || {};
+  
+  // Validate required fields
+  if (!name || typeof name !== 'string' || name.trim() === '') {
+    return res.status(400).json({ message: 'Product name is required' });
+  }
+  
+  if (price === undefined || price === null) {
+    return res.status(400).json({ message: 'Price is required' });
+  }
+  
+  if (stock === undefined || stock === null) {
+    return res.status(400).json({ message: 'Stock is required' });
+  }
+  
+  try {
+    const product = new Product({
+      name: name.trim(),
+      category: category ? category.trim() : null,
+      description: description ? description.trim() : null,
+      price: Number(price) || 0,
+      stock: Number(stock) || 0
+    });
+    
+    await product.save();
+    
+    const productWithUrl = {
+      ...product.toObject(),
+      id: product._id,
+      image_url: product.image ? `/uploads/${product.image}` : null,
+      placeholder_url: product.image ? `/api/products/${product._id}/image/placeholder` : `/assets/images/Midwest.jpg`,
+      has_image: !!product.image
+    };
+    
+    res.status(201).json({ 
+      message: 'Product created successfully',
+      product: productWithUrl
+    });
+  } catch (error) {
+    console.error('Error creating product:', error);
+    if (error.code === 11000) {
+      res.status(400).json({ message: 'Product with this name already exists' });
+    } else {
+      res.status(500).json({ message: 'Server error', error: error.message });
+    }
+  }
+}
+
 async function deleteProduct(req, res) {
   const id = req.params.id;
   if (!id) return res.status(400).json({ message: 'Invalid id' });
@@ -434,6 +483,7 @@ async function deleteProduct(req, res) {
 module.exports = { 
   listProducts, 
   getProduct, 
+  createProduct,
   updateProduct, 
   deleteProduct,
   uploadProductImage, 
