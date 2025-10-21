@@ -31,20 +31,29 @@ async function listProducts(req, res) {
     
     // Get paginated products with search
     const products = await Product.find(searchQuery)
-      .select('name category description price stock image createdAt')
+      .select('name category description price stock image image_mime_type createdAt')
       .sort({ name: 1 })
       .skip((page - 1) * pageSize)
       .limit(pageSize)
       .lean();
     
-    // Add lazy loading support for images
-    const productsWithUrls = products.map(product => ({
-      ...product,
-      id: product._id,
-      image_url: product.image ? `/uploads/${product.image}` : null,
-      placeholder_url: product.image ? `/api/products/${product._id}/image/placeholder` : `/assets/images/Midwest.jpg`,
-      has_image: !!product.image
-    }));
+    // Add lazy loading support for images with base64 data URLs
+    const productsWithUrls = products.map(product => {
+      // Create base64 data URL if image exists
+      let imageUrl = null;
+      if (product.image) {
+        const mimeType = product.image_mime_type || 'image/jpeg';
+        imageUrl = `data:${mimeType};base64,${product.image}`;
+      }
+      
+      return {
+        ...product,
+        id: product._id,
+        image_url: imageUrl,
+        placeholder_url: product.image ? `/api/products/${product._id}/image/placeholder` : `/assets/images/Midwest.jpg`,
+        has_image: !!product.image
+      };
+    });
     
     res.json({ 
       products: productsWithUrls, 
@@ -324,19 +333,28 @@ async function getAllProductsLazy(req, res) {
     
     // Get all products (no pagination for lazy loading)
     const products = await Product.find(searchQuery)
-      .select('name category description price stock image createdAt')
+      .select('name category description price stock image image_mime_type createdAt')
       .sort({ name: 1 })
       .lean();
     
-    // Add lazy loading support for images
-    const productsWithUrls = products.map(product => ({
-      ...product,
-      id: product._id,
-      image_url: product.image ? `/api/products/${product._id}/image` : null,
-      placeholder_url: product.image ? `/api/products/${product._id}/image/placeholder` : `/assets/images/Midwest.jpg`,
-      thumbnail_url: product.image ? `/api/products/${product._id}/image/thumbnail` : `/assets/images/Midwest.jpg`,
-      has_image: !!product.image
-    }));
+    // Add lazy loading support for images with base64 data URLs
+    const productsWithUrls = products.map(product => {
+      // Create base64 data URL if image exists
+      let imageUrl = null;
+      if (product.image) {
+        const mimeType = product.image_mime_type || 'image/jpeg';
+        imageUrl = `data:${mimeType};base64,${product.image}`;
+      }
+      
+      return {
+        ...product,
+        id: product._id,
+        image_url: imageUrl,
+        placeholder_url: product.image ? `/api/products/${product._id}/image/placeholder` : `/assets/images/Midwest.jpg`,
+        thumbnail_url: product.image ? `/api/products/${product._id}/image/thumbnail` : `/assets/images/Midwest.jpg`,
+        has_image: !!product.image
+      };
+    });
     
     res.json({ 
       products: productsWithUrls,
