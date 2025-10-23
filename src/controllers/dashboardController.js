@@ -454,6 +454,99 @@ async function syncClientOrders(_req, res) {
   }
 }
 
-module.exports = { getMetrics, getSalesOverview, aggregateSalesData, manualAggregateToday, syncClientOrders };
+// Get sales summary for a specific date (from SalesDailySummary)
+async function getSalesByDate(req, res) {
+  try {
+    const dateParam = (req.query.date || '').trim();
+    if (!dateParam) {
+      return res.status(400).json({ message: 'Query param "date" (YYYY-MM-DD) is required' });
+    }
+
+    const d = new Date(dateParam);
+    if (isNaN(d.getTime())) {
+      return res.status(400).json({ message: 'Invalid date format. Use YYYY-MM-DD' });
+    }
+    d.setHours(0, 0, 0, 0);
+    const next = new Date(d);
+    next.setDate(next.getDate() + 1);
+
+    const summary = await SalesDailySummary.findOne({
+      summary_date: { $gte: d, $lt: next }
+    }).lean();
+
+    const rows = summary ? [{
+      date: summary.summary_date,
+      gross_sales: Number(summary.gross_sales || 0),
+      refunds: Number(summary.refunds || 0),
+      discounts: Number(summary.discounts || 0),
+      net_sales: Number(summary.net_sales || 0),
+      cost_of_goods: Number(summary.cost_of_goods || 0),
+      gross_profit: Number(summary.gross_profit || 0),
+      margin_percent: Number(summary.margin_percent || 0),
+      taxes: Number(summary.taxes || 0)
+    }] : [];
+
+    res.json({
+      date: d.toISOString().slice(0, 10),
+      total: rows.length,
+      rows
+    });
+  } catch (error) {
+    console.error('Error in getSalesByDate:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+}
+
+// Get all orders for a specific date (tabular)
+async function getOrdersByDate(req, res) {
+  try {
+    const dateParam = (req.query.date || '').trim();
+    if (!dateParam) {
+      return res.status(400).json({ message: 'Query param "date" (YYYY-MM-DD) is required' });
+    }
+
+    const d = new Date(dateParam);
+    if (isNaN(d.getTime())) {
+      return res.status(400).json({ message: 'Invalid date format. Use YYYY-MM-DD' });
+    }
+    d.setHours(0, 0, 0, 0);
+    const next = new Date(d);
+    next.setDate(next.getDate() + 1);
+
+    const orders = await Order.find({
+      createdAt: { $gte: d, $lt: next }
+    }).sort({ createdAt: 1 }).lean();
+
+    const rows = orders.map(o => ({
+      id: o._id,
+      order_code: o.order_code || null,
+      createdAt: o.createdAt,
+      customer: o.name || null,
+      status: o.status || null,
+      total_price: Number(o.totalPrice || 0),
+      discount: Number(o.discount || 0),
+      net_total: Number(o.net_total || 0)
+    }));
+
+    const totals = rows.reduce((acc, r) => {
+      acc.total_orders += 1;
+      acc.gross_sales += r.total_price;
+      acc.discounts += r.discount;
+      acc.net_sales += r.net_total;
+      return acc;
+    }, { total_orders: 0, gross_sales: 0, discounts: 0, net_sales: 0 });
+
+    res.json({
+      date: d.toISOString().slice(0, 10),
+      ...totals,
+      rows
+    });
+  } catch (error) {
+    console.error('Error in getOrdersByDate:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+}
+
+module.exports = { getMetrics, getSalesOverview, aggregateSalesData, manualAggregateToday, syncClientOrders, getSalesByDate, getOrdersByDate };
 
 
