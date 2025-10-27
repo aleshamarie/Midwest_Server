@@ -24,90 +24,6 @@ async function listSuppliers(_req, res) {
   }
 }
 
-async function listSuppliersDataTables(req, res) {
-  try {
-    // DataTables server-side processing parameters
-    const draw = parseInt(req.query.draw) || 1;
-    const start = parseInt(req.query.start) || 0;
-    const length = parseInt(req.query.length) || 10;
-    const searchValue = req.query.search?.value || '';
-    const orderColumn = parseInt(req.query.order?.[0]?.column) || 0;
-    const orderDir = req.query.order?.[0]?.dir || 'asc';
-    
-    // Column mapping for sorting
-    const columnMap = {
-      0: 'name',
-      1: 'contact',
-      2: 'items',
-      3: 'last_delivery'
-    };
-    
-    const sortField = columnMap[orderColumn] || 'name';
-    const sortOrder = orderDir === 'desc' ? -1 : 1;
-    
-    // Build search condition
-    let searchQuery = {};
-    if (searchValue) {
-      searchQuery = {
-        $or: [
-          { name: { $regex: searchValue, $options: 'i' } },
-          { contact: { $regex: searchValue, $options: 'i' } }
-        ]
-      };
-    }
-    
-    // Get total count without search
-    const totalRecords = await Supplier.countDocuments({});
-    
-    // Get filtered count with search
-    const filteredRecords = await Supplier.countDocuments(searchQuery);
-    
-    // Get paginated suppliers with search and sorting
-    const suppliers = await Supplier.find(searchQuery)
-      .populate('products', 'name')
-      .sort({ [sortField]: sortOrder })
-      .allowDiskUse(true)
-      .skip(start)
-      .limit(length)
-      .lean();
-    
-    // Format data for DataTables
-    const data = suppliers.map(supplier => {
-      const formatDate = (date) => {
-        if (!date) return '-';
-        return new Date(date).toLocaleDateString();
-      };
-      
-      const itemsCount = supplier.products ? supplier.products.length : 0;
-      const itemsList = supplier.products ? supplier.products.map(p => p.name).join(', ') : 'No items';
-      
-      return {
-        DT_RowId: supplier._id,
-        name: supplier.name || '-',
-        contact: supplier.contact || '-',
-        items: `${itemsCount} items: ${itemsList}`,
-        last_delivery: formatDate(supplier.last_delivery),
-        actions: `<button onclick="editSupplier('${supplier._id}')" class="text-blue-600 hover:text-blue-800">Edit</button> | <button onclick="deleteSupplier('${supplier._id}')" class="text-red-600 hover:text-red-800">Delete</button>`
-      };
-    });
-    
-    res.json({
-      draw: draw,
-      recordsTotal: totalRecords,
-      recordsFiltered: filteredRecords,
-      data: data
-    });
-  } catch (error) {
-    console.error('Error in listSuppliersDataTables:', error);
-    res.status(500).json({ 
-      draw: parseInt(req.query.draw) || 1,
-      recordsTotal: 0,
-      recordsFiltered: 0,
-      data: [],
-      error: 'Server error'
-    });
-  }
-}
 
 async function createSupplier(req, res) {
   const { name, contact = null, lastDelivery = null } = req.body || {};
@@ -244,6 +160,6 @@ async function restockSupplierProduct(req, res) {
   }
 }
 
-module.exports = { listSuppliers, listSuppliersDataTables, createSupplier, updateSupplier, deleteSupplier, addSupplierProduct, restockSupplierProduct };
+module.exports = { listSuppliers, createSupplier, updateSupplier, deleteSupplier, addSupplierProduct, restockSupplierProduct };
 
 
