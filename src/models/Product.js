@@ -74,6 +74,12 @@ const productSchema = new mongoose.Schema({
 // Index for search functionality
 productSchema.index({ name: 'text', category: 'text', description: 'text' });
 
+// Index for sorting by name (ascending)
+productSchema.index({ name: 1 });
+
+// Compound index for sorting by name with stock filtering
+productSchema.index({ stock: 1, name: 1 });
+
 // Pre-save hook to calculate Dart hash
 productSchema.pre('save', function(next) {
   if (this.isNew || this.isModified('_id')) {

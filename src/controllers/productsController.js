@@ -29,10 +29,11 @@ async function listProducts(req, res) {
     // Get total count with search
     const total = await Product.countDocuments(searchQuery);
     
-    // Get paginated products with search
+    // Get paginated products with search and external sorting
     const products = await Product.find(searchQuery)
       .select('name category description price stock image image_mime_type createdAt')
       .sort({ name: 1 })
+      .allowDiskUse(true) // Enable external sorting to prevent memory limit issues
       .skip((page - 1) * pageSize)
       .limit(pageSize)
       .lean();
@@ -318,6 +319,8 @@ async function getProductThumbnail(req, res) {
 async function getAllProductsLazy(req, res) {
   try {
     const search = req.query.search || '';
+    const page = Math.max(parseInt(req.query.page || '1'), 1);
+    const pageSize = Math.min(Math.max(parseInt(req.query.pageSize || '100'), 1), 1000); // Max 1000 per page
     
     // Build search condition
     let searchQuery = {};
@@ -331,10 +334,16 @@ async function getAllProductsLazy(req, res) {
       };
     }
     
-    // Get all products (no pagination for lazy loading)
+    // Get total count for pagination
+    const total = await Product.countDocuments(searchQuery);
+    
+    // Get products with pagination and external sorting
     const products = await Product.find(searchQuery)
       .select('name category description price stock image image_mime_type createdAt')
       .sort({ name: 1 })
+      .allowDiskUse(true) // Enable external sorting to prevent memory limit issues
+      .skip((page - 1) * pageSize)
+      .limit(pageSize)
       .lean();
     
     // Add lazy loading support for images with base64 data URLs
@@ -358,7 +367,10 @@ async function getAllProductsLazy(req, res) {
     
     res.json({ 
       products: productsWithUrls,
-      total: productsWithUrls.length,
+      total: total,
+      page: page,
+      pageSize: pageSize,
+      totalPages: Math.ceil(total / pageSize),
       lazy_loading: true
     });
   } catch (error) {
@@ -391,10 +403,11 @@ async function getLowStockItems(req, res) {
       };
     }
     
-    // Get all low stock products
+    // Get all low stock products with external sorting
     const products = await Product.find(searchQuery)
       .select('name category description price stock image createdAt')
       .sort({ stock: 1, name: 1 })
+      .allowDiskUse(true) // Enable external sorting to prevent memory limit issues
       .lean();
     
     // Add lazy loading support for images
