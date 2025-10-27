@@ -71,6 +71,96 @@ async function listProducts(req, res) {
   }
 }
 
+async function listProductsDataTables(req, res) {
+  try {
+    // DataTables server-side processing parameters
+    const draw = parseInt(req.query.draw) || 1;
+    const start = parseInt(req.query.start) || 0;
+    const length = parseInt(req.query.length) || 10;
+    const searchValue = req.query.search?.value || '';
+    const orderColumn = parseInt(req.query.order?.[0]?.column) || 0;
+    const orderDir = req.query.order?.[0]?.dir || 'asc';
+    
+    // Column mapping for sorting
+    const columnMap = {
+      0: 'name',
+      1: 'category', 
+      2: 'description',
+      3: 'price',
+      4: 'stock'
+    };
+    
+    const sortField = columnMap[orderColumn] || 'name';
+    const sortOrder = orderDir === 'desc' ? -1 : 1;
+    
+    // Build search condition
+    let searchQuery = {};
+    if (searchValue) {
+      searchQuery = {
+        $or: [
+          { name: { $regex: searchValue, $options: 'i' } },
+          { category: { $regex: searchValue, $options: 'i' } },
+          { description: { $regex: searchValue, $options: 'i' } }
+        ]
+      };
+    }
+    
+    // Get total count without search
+    const totalRecords = await Product.countDocuments({});
+    
+    // Get filtered count with search
+    const filteredRecords = await Product.countDocuments(searchQuery);
+    
+    // Get paginated products with search and sorting
+    const products = await Product.find(searchQuery)
+      .select('name category description price stock image image_mime_type createdAt')
+      .sort({ [sortField]: sortOrder })
+      .allowDiskUse(true)
+      .skip(start)
+      .limit(length)
+      .lean();
+    
+    // Format data for DataTables
+    const data = products.map(product => {
+      // Create base64 data URL if image exists
+      let imageUrl = null;
+      if (product.image) {
+        const mimeType = product.image_mime_type || 'image/jpeg';
+        imageUrl = `data:${mimeType};base64,${product.image}`;
+      }
+      
+      return {
+        DT_RowId: product._id,
+        name: product.name,
+        category: product.category || '-',
+        description: product.description || '-',
+        price: product.price,
+        stock: product.stock,
+        image_url: imageUrl,
+        placeholder_url: product.image ? `/api/products/${product._id}/image/placeholder` : `/assets/images/Midwest.jpg`,
+        has_image: !!product.image,
+        actions: `<button onclick="editProduct('${product._id}')" class="text-blue-600 hover:text-blue-800">Edit</button> | <button onclick="deleteProduct('${product._id}')" class="text-red-600 hover:text-red-800">Delete</button>`
+      };
+    });
+    
+    res.json({
+      draw: draw,
+      recordsTotal: totalRecords,
+      recordsFiltered: filteredRecords,
+      data: data
+    });
+  } catch (error) {
+    console.error('Error in listProductsDataTables:', error);
+    res.status(500).json({ 
+      draw: parseInt(req.query.draw) || 1,
+      recordsTotal: 0,
+      recordsFiltered: 0,
+      data: [],
+      error: 'Server error'
+    });
+  }
+}
+
 async function updateProduct(req, res) {
   const id = req.params.id;
   const { name, category, description, price, stock } = req.body || {};
@@ -513,6 +603,7 @@ async function deleteProduct(req, res) {
 
 module.exports = { 
   listProducts, 
+  listProductsDataTables,
   getProduct, 
   createProduct,
   updateProduct, 

@@ -2,6 +2,7 @@ const express = require('express');
 const { authRequired } = require('../middleware/auth');
 const { 
   listProducts, 
+  listProductsDataTables,
   getProduct, 
   createProduct,
   updateProduct, 
@@ -26,6 +27,8 @@ const router = express.Router();
 
 router.get('/', authRequired, listProducts);
 router.get('/public', listProducts);
+router.get('/datatables', authRequired, listProductsDataTables);
+router.get('/datatables/public', listProductsDataTables);
 router.post('/', authRequired, createProduct);
 router.get('/lazy', authRequired, getAllProductsLazy);
 router.get('/lazy/public', getAllProductsLazy);

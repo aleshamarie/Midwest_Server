@@ -1,11 +1,13 @@
 const express = require('express');
 const { authRequired } = require('../middleware/auth');
-const { listOrders, updateOrderPayment, createOrder, getOrder, getOrderItems } = require('../controllers/ordersController');
+const { listOrders, listOrdersDataTables, updateOrderPayment, createOrder, getOrder, getOrderItems } = require('../controllers/ordersController');
 
 const router = express.Router();
 
 router.get('/', authRequired, listOrders);
 router.get('/public', listOrders);
+router.get('/datatables', authRequired, listOrdersDataTables);
+router.get('/datatables/public', listOrdersDataTables);
 router.get('/:id', authRequired, getOrder);
 router.get('/:id/public', getOrder);
 router.get('/:id/items', authRequired, getOrderItems);
