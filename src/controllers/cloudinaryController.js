@@ -8,7 +8,7 @@ const storage = multer.memoryStorage();
 const upload = multer({ 
   storage: storage,
   limits: {
-    fileSize: 10 * 1024 * 1024 // 10MB limit
+    fileSize: 5 * 1024 * 1024 // 5MB limit
   },
   fileFilter: (req, file, cb) => {
     const allowedTypes = /jpeg|jpg|png|gif|webp/;
@@ -33,6 +33,14 @@ async function uploadImage(req, res) {
   
   if (!req.file) {
     return res.status(400).json({ message: 'No image file provided' });
+  }
+
+  // Check file size (5MB limit)
+  const maxSize = 5 * 1024 * 1024; // 5MB in bytes
+  if (req.file.size > maxSize) {
+    return res.status(400).json({ 
+      message: `Image file too large. Maximum size is 5MB. Current size: ${Math.round(req.file.size / 1024 / 1024 * 100) / 100}MB` 
+    });
   }
 
   try {
@@ -108,6 +116,15 @@ async function uploadImageFromBase64(req, res) {
   
   if (!imageData) {
     return res.status(400).json({ message: 'Image data is required' });
+  }
+
+  // Check base64 payload size (5MB limit)
+  const payloadSize = Buffer.byteLength(imageData, 'utf8');
+  const maxSize = 5 * 1024 * 1024; // 5MB limit
+  if (payloadSize > maxSize) {
+    return res.status(400).json({ 
+      message: `Image too large. Maximum size is 5MB. Current size: ${Math.round(payloadSize / 1024 / 1024 * 100) / 100}MB` 
+    });
   }
 
   try {
