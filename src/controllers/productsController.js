@@ -45,7 +45,7 @@ async function listProducts(req, res) {
         id: product._id,
         image_url: product.image_url,
         placeholder_url: product.image_url || `/assets/images/Midwest.jpg`,
-        has_image: !!product.image_url_url
+        has_image: !!product.image_url
       };
     });
     
@@ -117,6 +117,7 @@ async function listProductsDataTables(req, res) {
     const data = products.map(product => {
       return {
         DT_RowId: product._id,
+        id: product._id, // Add id field for client-side access
         name: product.name,
         category: product.category || '-',
         description: product.description || '-',
@@ -124,7 +125,7 @@ async function listProductsDataTables(req, res) {
         stock: product.stock,
         image_url: product.image_url,
         placeholder_url: product.image_url || `/assets/images/Midwest.jpg`,
-        has_image: !!product.image_url_url,
+        has_image: !!product.image_url,
         actions: `<button onclick="editProduct('${product._id}')" class="text-blue-600 hover:text-blue-800">Edit</button> | <button onclick="deleteProduct('${product._id}')" class="text-red-600 hover:text-red-800">Delete</button>`
       };
     });
@@ -374,7 +375,7 @@ async function getAllProductsLazy(req, res) {
         image_url: product.image_url,
         placeholder_url: product.image_url || `/assets/images/Midwest.jpg`,
         thumbnail_url: product.image_url || `/assets/images/Midwest.jpg`,
-        has_image: !!product.image_url_url
+        has_image: !!product.image_url
       };
     });
     
@@ -430,7 +431,7 @@ async function getLowStockItems(req, res) {
         image_url: product.image_url,
         placeholder_url: product.image_url || `/assets/images/Midwest.jpg`,
         thumbnail_url: product.image_url || `/assets/images/Midwest.jpg`,
-        has_image: !!product.image_url_url,
+        has_image: !!product.image_url,
       is_low_stock: true,
       stock_status: product.stock === 0 ? 'out_of_stock' : 'low_stock'
     }));
