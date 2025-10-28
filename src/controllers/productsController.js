@@ -31,28 +31,21 @@ async function listProducts(req, res) {
     
     // Get paginated products with search and external sorting
     const products = await Product.find(searchQuery)
-      .select('name category description price stock image image_mime_type createdAt')
+      .select('name category description price stock image_url image_public_id createdAt')
       .sort({ name: 1 })
       .allowDiskUse(true) // Enable external sorting to prevent memory limit issues
       .skip((page - 1) * pageSize)
       .limit(pageSize)
       .lean();
     
-    // Add lazy loading support for images with base64 data URLs
+    // Add lazy loading support for images with Cloudinary URLs
     const productsWithUrls = products.map(product => {
-      // Create base64 data URL if image exists
-      let imageUrl = null;
-      if (product.image) {
-        const mimeType = product.image_mime_type || 'image/jpeg';
-        imageUrl = `data:${mimeType};base64,${product.image}`;
-      }
-      
       return {
         ...product,
         id: product._id,
-        image_url: imageUrl,
-        placeholder_url: product.image ? `/api/products/${product._id}/image/placeholder` : `/assets/images/Midwest.jpg`,
-        has_image: !!product.image
+        image_url: product.image_url,
+        placeholder_url: product.image_url || `/assets/images/Midwest.jpg`,
+        has_image: !!product.image_url_url
       };
     });
     
@@ -113,7 +106,7 @@ async function listProductsDataTables(req, res) {
     
     // Get paginated products with search and sorting
     const products = await Product.find(searchQuery)
-      .select('name category description price stock image image_mime_type createdAt')
+      .select('name category description price stock image_url image_public_id createdAt')
       .sort({ [sortField]: sortOrder })
       .allowDiskUse(true)
       .skip(start)
@@ -122,13 +115,6 @@ async function listProductsDataTables(req, res) {
     
     // Format data for DataTables
     const data = products.map(product => {
-      // Create base64 data URL if image exists
-      let imageUrl = null;
-      if (product.image) {
-        const mimeType = product.image_mime_type || 'image/jpeg';
-        imageUrl = `data:${mimeType};base64,${product.image}`;
-      }
-      
       return {
         DT_RowId: product._id,
         name: product.name,
@@ -136,9 +122,9 @@ async function listProductsDataTables(req, res) {
         description: product.description || '-',
         price: product.price,
         stock: product.stock,
-        image_url: imageUrl,
-        placeholder_url: product.image ? `/api/products/${product._id}/image/placeholder` : `/assets/images/Midwest.jpg`,
-        has_image: !!product.image,
+        image_url: product.image_url,
+        placeholder_url: product.image_url || `/assets/images/Midwest.jpg`,
+        has_image: !!product.image_url_url,
         actions: `<button onclick="editProduct('${product._id}')" class="text-blue-600 hover:text-blue-800">Edit</button> | <button onclick="deleteProduct('${product._id}')" class="text-red-600 hover:text-red-800">Delete</button>`
       };
     });
@@ -188,7 +174,7 @@ async function updateProduct(req, res) {
     const productWithUrl = {
       ...product.toObject(),
       id: product._id,
-      image_url: product.image ? `/uploads/${product.image}` : `/assets/images/Midwest.jpg`
+      image_url: product.image_url || `/assets/images/Midwest.jpg`
     };
     res.json({ product: productWithUrl });
   } catch (_e) {
@@ -270,7 +256,7 @@ async function getProduct(req, res) {
     const productWithUrl = {
       ...product.toObject(),
       id: product._id,
-      image_url: product.image ? `/uploads/${product.image}` : `/assets/images/Midwest.jpg`
+      image_url: product.image_url || `/assets/images/Midwest.jpg`
     };
     
     res.json({ product: productWithUrl });
@@ -304,8 +290,8 @@ async function getProductImagePlaceholder(req, res) {
   if (!id) return res.status(400).json({ message: 'Invalid id' });
   
   try {
-    const product = await Product.findById(id).select('image');
-    if (!product || !product.image) {
+    const product = await Product.findById(id).select('image_url');
+    if (!product || !product.image_url) {
       // Return default placeholder
       const defaultPath = path.join(__dirname, '../../assets/images/Midwest.jpg');
       return res.sendFile(defaultPath);
@@ -335,27 +321,14 @@ async function getProductThumbnail(req, res) {
   if (!id) return res.status(400).json({ message: 'Invalid id' });
   
   try {
-    const product = await Product.findById(id).select('image image_mime_type');
-    if (!product || !product.image) {
+    const product = await Product.findById(id).select('image_url');
+    if (!product || !product.image_url) {
       const defaultPath = path.join(__dirname, '../../assets/images/Midwest.jpg');
       return res.sendFile(defaultPath);
     }
     
-    // Convert base64 to buffer
-    const imageBuffer = Buffer.from(product.image, 'base64');
-    const mimeType = product.image_mime_type || 'image/jpeg';
-    
-    // Set thumbnail-specific headers
-    res.set({
-      'Cache-Control': 'public, max-age=604800', // 1 week
-      'Content-Type': mimeType,
-      'Content-Length': imageBuffer.length,
-      'X-Image-Type': 'thumbnail',
-      'X-Thumbnail-Size': size,
-      'X-Loading-Strategy': 'eager'
-    });
-    
-    res.send(imageBuffer);
+    // Redirect to Cloudinary URL
+    return res.redirect(product.image_url);
   } catch (error) {
     console.error('Error serving thumbnail:', error);
     res.status(500).json({ message: 'Server error' });
@@ -386,29 +359,22 @@ async function getAllProductsLazy(req, res) {
     
     // Get products with pagination and external sorting
     const products = await Product.find(searchQuery)
-      .select('name category description price stock image image_mime_type createdAt')
+      .select('name category description price stock image_url image_public_id createdAt')
       .sort({ name: 1 })
       .allowDiskUse(true) // Enable external sorting to prevent memory limit issues
       .skip((page - 1) * pageSize)
       .limit(pageSize)
       .lean();
     
-    // Add lazy loading support for images with base64 data URLs
+    // Add lazy loading support for images with Cloudinary URLs
     const productsWithUrls = products.map(product => {
-      // Create base64 data URL if image exists
-      let imageUrl = null;
-      if (product.image) {
-        const mimeType = product.image_mime_type || 'image/jpeg';
-        imageUrl = `data:${mimeType};base64,${product.image}`;
-      }
-      
       return {
         ...product,
         id: product._id,
-        image_url: imageUrl,
-        placeholder_url: product.image ? `/api/products/${product._id}/image/placeholder` : `/assets/images/Midwest.jpg`,
-        thumbnail_url: product.image ? `/api/products/${product._id}/image/thumbnail` : `/assets/images/Midwest.jpg`,
-        has_image: !!product.image
+        image_url: product.image_url,
+        placeholder_url: product.image_url || `/assets/images/Midwest.jpg`,
+        thumbnail_url: product.image_url || `/assets/images/Midwest.jpg`,
+        has_image: !!product.image_url_url
       };
     });
     
@@ -461,10 +427,10 @@ async function getLowStockItems(req, res) {
     const productsWithUrls = products.map(product => ({
       ...product,
       id: product._id,
-      image_url: product.image ? `/api/products/${product._id}/image` : null,
-      placeholder_url: product.image ? `/api/products/${product._id}/image/placeholder` : `/assets/images/Midwest.jpg`,
-      thumbnail_url: product.image ? `/api/products/${product._id}/image/thumbnail` : `/assets/images/Midwest.jpg`,
-      has_image: !!product.image,
+        image_url: product.image_url,
+        placeholder_url: product.image_url || `/assets/images/Midwest.jpg`,
+        thumbnail_url: product.image_url || `/assets/images/Midwest.jpg`,
+        has_image: !!product.image_url_url,
       is_low_stock: true,
       stock_status: product.stock === 0 ? 'out_of_stock' : 'low_stock'
     }));
@@ -513,9 +479,9 @@ async function createProduct(req, res) {
     const productWithUrl = {
       ...product.toObject(),
       id: product._id,
-      image_url: product.image ? `/uploads/${product.image}` : null,
-      placeholder_url: product.image ? `/api/products/${product._id}/image/placeholder` : `/assets/images/Midwest.jpg`,
-      has_image: !!product.image
+      image_url: product.image_url,
+      placeholder_url: product.image_url || `/assets/images/Midwest.jpg`,
+      has_image: !!product.image_url
     };
     
     res.status(201).json({ 

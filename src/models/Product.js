@@ -99,24 +99,19 @@ productSchema.pre('save', function(next) {
   next();
 });
 
-// Virtual for image URL (base64 data URL)
-productSchema.virtual('image_url').get(function() {
-  return this.image ? `data:${this.image_mime_type || 'image/jpeg'};base64,${this.image}` : null;
-});
-
 // Virtual for placeholder URL
 productSchema.virtual('placeholder_url').get(function() {
-  return this.image ? `/api/products/${this._id}/image/placeholder` : `/assets/images/Midwest.jpg`;
+  return this.image_url ? this.image_url : `/assets/images/Midwest.jpg`;
 });
 
 // Virtual for thumbnail URL
 productSchema.virtual('thumbnail_url').get(function() {
-  return this.image ? `/api/products/${this._id}/image/thumbnail` : `/assets/images/Midwest.jpg`;
+  return this.image_url ? this.image_url : `/assets/images/Midwest.jpg`;
 });
 
 // Virtual for has_image
 productSchema.virtual('has_image').get(function() {
-  return !!this.image;
+  return !!this.image_url;
 });
 
 // Ensure virtual fields are serialized
