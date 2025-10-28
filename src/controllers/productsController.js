@@ -205,37 +205,13 @@ async function uploadProductImage(req, res) {
   }
 
   try {
-    // Convert file to base64
-    const fs = require('fs');
-    const imageBuffer = fs.readFileSync(req.file.path);
-    const base64Image = imageBuffer.toString('base64');
-    const mimeType = req.file.mimetype;
+    // Import Cloudinary controller
+    const { uploadImage } = require('./cloudinaryController');
     
-    // Update product with base64 image data
-    const product = await Product.findByIdAndUpdate(
-      id,
-      { 
-        image: base64Image,
-        image_mime_type: mimeType
-      },
-      { new: true, select: 'name category price stock image image_mime_type createdAt' }
-    );
+    // Use Cloudinary upload function
+    req.params.id = id;
+    return await uploadImage(req, res);
     
-    if (!product) return res.status(404).json({ message: 'Product not found' });
-    
-    // Clean up uploaded file
-    fs.unlinkSync(req.file.path);
-    
-    const productWithUrl = {
-      ...product.toObject(),
-      id: product._id,
-      image_url: product.image_url
-    };
-    
-    res.json({ 
-      message: 'Image uploaded successfully',
-      product: productWithUrl
-    });
   } catch (_e) {
     console.error('Error uploading image:', _e);
     res.status(500).json({ message: 'Server error' });
@@ -247,22 +223,13 @@ async function deleteProductImage(req, res) {
   if (!id) return res.status(400).json({ message: 'Invalid id' });
   
   try {
-    // Get current product to check if image exists
-    const product = await Product.findById(id).select('image image_mime_type');
-    if (!product) return res.status(404).json({ message: 'Product not found' });
+    // Import Cloudinary controller
+    const { deleteImage } = require('./cloudinaryController');
     
-    const hadImage = !!product.image;
-    console.log(`Deleting image for product ${id}: ${hadImage ? 'has image' : 'no image'}`);
+    // Use Cloudinary delete function
+    req.params.id = id;
+    return await deleteImage(req, res);
     
-    // Remove image from database
-    await Product.findByIdAndUpdate(id, { 
-      $unset: { image: 1, image_mime_type: 1 } 
-    });
-    
-    res.json({ 
-      message: 'Image deleted successfully',
-      hadImage: hadImage
-    });
   } catch (error) {
     console.error('Error deleting product image:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
@@ -319,23 +286,13 @@ async function getProductImage(req, res) {
   if (!id) return res.status(400).json({ message: 'Invalid id' });
   
   try {
-    const product = await Product.findById(id).select('image image_mime_type');
-    if (!product || !product.image) {
-      return res.status(404).json({ message: 'Product or image not found' });
-    }
+    // Import Cloudinary controller
+    const { getImageUrl } = require('./cloudinaryController');
     
-    // Convert base64 to buffer
-    const imageBuffer = Buffer.from(product.image, 'base64');
-    const mimeType = product.image_mime_type || 'image/jpeg';
+    // Use Cloudinary get image URL function
+    req.params.id = id;
+    return await getImageUrl(req, res);
     
-    // Set appropriate headers
-    res.set({
-      'Content-Type': mimeType,
-      'Content-Length': imageBuffer.length,
-      'Cache-Control': 'public, max-age=86400' // 1 day
-    });
-    
-    res.send(imageBuffer);
   } catch (error) {
     console.error('Error serving product image:', error);
     res.status(500).json({ message: 'Server error' });

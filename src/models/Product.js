@@ -14,8 +14,8 @@ const productSchema = new mongoose.Schema({
   },
   category: String,
   description: String,
-  image: String, // Base64 encoded image data
-  image_mime_type: String, // MIME type (image/jpeg, image/png, etc.)
+  image_url: String, // Cloudinary image URL
+  image_public_id: String, // Cloudinary public ID for image management
   sold_by_weight: {
     type: Boolean,
     default: false

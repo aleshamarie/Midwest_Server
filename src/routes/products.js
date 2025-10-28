@@ -17,10 +17,12 @@ const {
   getLowStockItems
 } = require('../controllers/productsController');
 const { 
-  uploadImageBase64, 
-  getImageBase64, 
-  deleteImageBase64 
-} = require('../controllers/imageUploadController');
+  uploadImage,
+  uploadImageFromBase64,
+  deleteImage,
+  getImageUrl,
+  upload
+} = require('../controllers/cloudinaryController');
 const { handleUpload } = require('../middleware/upload');
 
 const router = express.Router();
@@ -40,14 +42,12 @@ router.get('/:id/image/placeholder', authRequired, getProductImagePlaceholder);
 router.get('/:id/image/thumbnail', authRequired, getProductThumbnail);
 router.patch('/:id', authRequired, updateProduct);
 router.delete('/:id', authRequired, deleteProduct);
-router.post('/:id/image', authRequired, handleUpload, uploadProductImage);
-router.delete('/:id/image', authRequired, deleteProductImage);
+router.post('/:id/image', authRequired, upload.single('image'), uploadImage);
+router.delete('/:id/image', authRequired, deleteImage);
 router.post('/cleanup-images', authRequired, cleanupOrphanedImages);
 
-// Base64 image endpoints
-router.post('/:id/image/base64', authRequired, uploadImageBase64);
-router.get('/:id/image/base64', authRequired, getImageBase64);
-router.delete('/:id/image/base64', authRequired, deleteImageBase64);
+// Migration endpoint for base64 images
+router.post('/:id/image/migrate', authRequired, uploadImageFromBase64);
 
 module.exports = router;
 
