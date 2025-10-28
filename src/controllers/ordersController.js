@@ -453,23 +453,31 @@ async function getOrder(req, res) {
     if (!order) return res.status(404).json({ message: 'Order not found' });
 
     // Get items from separate collection
-    const items = await OrderItem.find({ order_id: id })
+    const items = await OrderItem.find({ order_id: new mongoose.Types.ObjectId(id) })
       .populate('product_id', 'name category price')
       .lean();
 
     // Format items with product names
-    const formattedItems = items.map(item => ({
-      product_id: item.product_id._id,
-      name: item.product_name,
-      quantity: Number(item.quantity) || 0,
-      price: Number(item.unit_price) || 0,
-      total_price: Number(item.total_price) || 0,
-      product_details: {
-        name: item.product_id.name,
-        category: item.product_id.category,
-        price: item.product_id.price
-      }
-    }));
+    const formattedItems = items.map(item => {
+      // Handle cases where product_id might be null or undefined after populate
+      const productId = item.product_id ? item.product_id._id : null;
+      const productName = item.product_id ? item.product_id.name : 'Unknown Product';
+      const productCategory = item.product_id ? item.product_id.category : 'Unknown';
+      const productPrice = item.product_id ? item.product_id.price : 0;
+
+      return {
+        product_id: productId,
+        name: item.product_name || productName,
+        quantity: Number(item.quantity) || 0,
+        price: Number(item.unit_price) || 0,
+        total_price: Number(item.total_price) || 0,
+        product_details: {
+          name: productName,
+          category: productCategory,
+          price: productPrice
+        }
+      };
+    });
 
     const orderResponse = {
       ...order,
@@ -498,26 +506,35 @@ async function getOrderItems(req, res) {
     if (!order) return res.status(404).json({ message: 'Order not found' });
 
     // Get items from separate collection
-    const items = await OrderItem.find({ order_id: id })
+    const items = await OrderItem.find({ order_id: new mongoose.Types.ObjectId(id) })
       .populate('product_id', 'name category price')
       .lean();
 
-    const formattedItems = items.map((item, index) => ({
-      id: index + 1, // Use index as id for consistency
-      product_id: item.product_id._id,
-      name: item.product_name,
-      quantity: Number(item.quantity) || 0,
-      price: Number(item.unit_price) || 0,
-      total_price: Number(item.total_price) || 0,
-      product_details: {
-        name: item.product_id.name,
-        category: item.product_id.category,
-        price: item.product_id.price
-      }
-    }));
+    const formattedItems = items.map((item, index) => {
+      // Handle cases where product_id might be null or undefined after populate
+      const productId = item.product_id ? item.product_id._id : null;
+      const productName = item.product_id ? item.product_id.name : 'Unknown Product';
+      const productCategory = item.product_id ? item.product_id.category : 'Unknown';
+      const productPrice = item.product_id ? item.product_id.price : 0;
 
-    res.json({ items });
-  } catch (_e) {
+      return {
+        id: index + 1, // Use index as id for consistency
+        product_id: productId,
+        name: item.product_name || productName,
+        quantity: Number(item.quantity) || 0,
+        price: Number(item.unit_price) || 0,
+        total_price: Number(item.total_price) || 0,
+        product_details: {
+          name: productName,
+          category: productCategory,
+          price: productPrice
+        }
+      };
+    });
+
+    res.json({ items: formattedItems });
+  } catch (error) {
+    console.error('Error in getOrderItems:', error);
     res.status(500).json({ message: 'Server error' });
   }
 }
