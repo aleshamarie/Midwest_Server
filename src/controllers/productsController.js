@@ -249,7 +249,7 @@ async function getProduct(req, res) {
   
   try {
     const product = await Product.findById(id)
-      .select('name category description price stock image createdAt');
+      .select('name category description price stock image_url image_public_id createdAt');
     
     if (!product) return res.status(404).json({ message: 'Product not found' });
     
@@ -418,7 +418,7 @@ async function getLowStockItems(req, res) {
     
     // Get all low stock products with external sorting
     const products = await Product.find(searchQuery)
-      .select('name category description price stock image createdAt')
+      .select('name category description price stock image_url image_public_id createdAt')
       .sort({ stock: 1, name: 1 })
       .allowDiskUse(true) // Enable external sorting to prevent memory limit issues
       .lean();
