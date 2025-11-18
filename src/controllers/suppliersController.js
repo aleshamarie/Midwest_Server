@@ -1,5 +1,6 @@
 const Supplier = require('../models/Supplier');
 const Product = require('../models/Product');
+const SupplierProduct = require('../models/SupplierProduct');
 
 async function listSuppliers(_req, res) {
   try {
@@ -125,8 +126,10 @@ async function restockSupplierProduct(req, res) {
   const quantity = Number(qty) || 0;
   if (quantity <= 0) return res.status(400).json({ message: 'Quantity must be > 0' });
   
+  let session;
   try {
-    const session = await Supplier.startSession();
+    session = await Supplier.startSession();
+    const deliveryDate = date ? new Date(date) : new Date();
     await session.withTransaction(async () => {
       // Update product stock
       const product = await Product.findByIdAndUpdate(
@@ -137,26 +140,68 @@ async function restockSupplierProduct(req, res) {
       
       if (!product) throw new Error('Product not found');
       
-      // Update supplier last delivery
+      // Upsert SupplierProduct relationship and track restock stats
+      const supplierProduct = await SupplierProduct.findOneAndUpdate(
+        { supplier_id: supplierId, product_id: productId },
+        {
+          $setOnInsert: {
+            supplier_id: supplierId,
+            product_id: productId,
+            supplier_sku: product.sku,
+            supplier_name: product.name,
+            supplier_price: product.price,
+            supplier_cost: product.cost,
+            is_primary_supplier: false,
+            is_active: true,
+            lead_time_days: 0,
+            minimum_order_quantity: 1,
+            quality_rating: 3
+          },
+          $set: {
+            last_order_date: deliveryDate,
+            last_delivery_date: deliveryDate,
+            supplier_name: product.name,
+            supplier_sku: product.sku,
+            updated_at: new Date(),
+            is_active: true
+          },
+          $inc: {
+            total_orders: 1,
+            total_quantity_ordered: quantity
+          }
+        },
+        { new: true, upsert: true, session, setDefaultsOnInsert: true }
+      );
+      
+      // Update supplier last delivery and ensure relationships are linked
       await Supplier.findByIdAndUpdate(
         supplierId,
         { 
-          last_delivery: date ? new Date(date) : new Date(),
-          $addToSet: { products: productId }
+          last_delivery: deliveryDate,
+          $addToSet: { 
+            products: productId,
+            supplier_products: supplierProduct._id
+          }
         },
         { session }
       );
-      
-      return { product, supplierId };
     });
     
-    const product = await Product.findById(productId).select('name category price stock');
-    const supplier = await Supplier.findById(supplierId).select('name contact last_delivery');
+    const [product, supplier, supplierProduct] = await Promise.all([
+      Product.findById(productId).select('name category price stock'),
+      Supplier.findById(supplierId).select('name contact last_delivery'),
+      SupplierProduct.findOne({ supplier_id: supplierId, product_id: productId })
+        .select('supplier_id product_id supplier_price supplier_cost total_orders total_quantity_ordered last_delivery_date last_order_date')
+    ]);
     
-    res.json({ success: true, product, supplier });
+    res.json({ success: true, product, supplier, supplier_product: supplierProduct });
   } catch (e) {
     console.error('Error in restockSupplierProduct:', e);
     res.status(500).json({ message: 'Server error' });
+  } finally {
+    if (session) {
+      await session.endSession();
+    }
   }
 }
 
