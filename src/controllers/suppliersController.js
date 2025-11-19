@@ -141,16 +141,20 @@ async function restockSupplierProduct(req, res) {
       if (!product) throw new Error('Product not found');
       
       // Upsert SupplierProduct relationship and track restock stats
+      // Ensure price and cost have valid values (SupplierProduct schema requires them)
+      const supplierPrice = product.price != null ? product.price : 0;
+      const supplierCost = product.cost != null ? product.cost : 0;
+      
       const supplierProduct = await SupplierProduct.findOneAndUpdate(
         { supplier_id: supplierId, product_id: productId },
         {
           $setOnInsert: {
             supplier_id: supplierId,
             product_id: productId,
-            supplier_sku: product.sku,
-            supplier_name: product.name,
-            supplier_price: product.price,
-            supplier_cost: product.cost,
+            supplier_sku: product.sku || '',
+            supplier_name: product.name || '',
+            supplier_price: supplierPrice,
+            supplier_cost: supplierCost,
             is_primary_supplier: false,
             is_active: true,
             lead_time_days: 0,
@@ -160,8 +164,10 @@ async function restockSupplierProduct(req, res) {
           $set: {
             last_order_date: deliveryDate,
             last_delivery_date: deliveryDate,
-            supplier_name: product.name,
-            supplier_sku: product.sku,
+            supplier_name: product.name || '',
+            supplier_sku: product.sku || '',
+            supplier_price: supplierPrice,
+            supplier_cost: supplierCost,
             updated_at: new Date(),
             is_active: true
           },
