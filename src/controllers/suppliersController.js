@@ -174,7 +174,6 @@ async function restockSupplierProduct(req, res) {
             supplier_id: supplierId,
             product_id: productId,
             is_primary_supplier: false,
-            is_active: true,
             lead_time_days: 0,
             minimum_order_quantity: 1,
             quality_rating: 3
