@@ -173,10 +173,6 @@ async function restockSupplierProduct(req, res) {
           $setOnInsert: {
             supplier_id: supplierId,
             product_id: productId,
-            supplier_sku: product.sku || '',
-            supplier_name: product.name || '',
-            supplier_price: supplierPrice,
-            supplier_cost: supplierCost,
             is_primary_supplier: false,
             is_active: true,
             lead_time_days: 0,
