@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const Supplier = require('../models/Supplier');
 const Product = require('../models/Product');
 const SupplierProduct = require('../models/SupplierProduct');
@@ -120,16 +121,35 @@ async function addSupplierProduct(req, res) {
 async function restockSupplierProduct(req, res) {
   const supplierId = req.params.id;
   const { productId, qty, date } = req.body || {};
+  
+  // Validate input
   if (!supplierId || !productId) {
-    return res.status(400).json({ message: 'Invalid ids' });
+    return res.status(400).json({ message: 'Invalid ids: supplierId and productId are required' });
   }
+  
   const quantity = Number(qty) || 0;
-  if (quantity <= 0) return res.status(400).json({ message: 'Quantity must be > 0' });
+  if (quantity <= 0) {
+    return res.status(400).json({ message: 'Quantity must be > 0' });
+  }
+  
+  // Validate ObjectId format
+  if (!mongoose.Types.ObjectId.isValid(supplierId)) {
+    return res.status(400).json({ message: 'Invalid supplier ID format' });
+  }
+  if (!mongoose.Types.ObjectId.isValid(productId)) {
+    return res.status(400).json({ message: 'Invalid product ID format' });
+  }
   
   let session;
   try {
     session = await Supplier.startSession();
     const deliveryDate = date ? new Date(date) : new Date();
+    
+    // Validate date
+    if (isNaN(deliveryDate.getTime())) {
+      return res.status(400).json({ message: 'Invalid date format' });
+    }
+    
     await session.withTransaction(async () => {
       // Update product stock
       const product = await Product.findByIdAndUpdate(
@@ -138,7 +158,9 @@ async function restockSupplierProduct(req, res) {
         { new: true, session }
       );
       
-      if (!product) throw new Error('Product not found');
+      if (!product) {
+        throw new Error(`Product not found with ID: ${productId}`);
+      }
       
       // Upsert SupplierProduct relationship and track restock stats
       // Ensure price and cost have valid values (SupplierProduct schema requires them)
@@ -179,8 +201,12 @@ async function restockSupplierProduct(req, res) {
         { new: true, upsert: true, session, setDefaultsOnInsert: true }
       );
       
+      if (!supplierProduct) {
+        throw new Error('Failed to create or update SupplierProduct relationship');
+      }
+      
       // Update supplier last delivery and ensure relationships are linked
-      await Supplier.findByIdAndUpdate(
+      const supplier = await Supplier.findByIdAndUpdate(
         supplierId,
         { 
           last_delivery: deliveryDate,
@@ -189,8 +215,12 @@ async function restockSupplierProduct(req, res) {
             supplier_products: supplierProduct._id
           }
         },
-        { session }
+        { session, new: true }
       );
+      
+      if (!supplier) {
+        throw new Error(`Supplier not found with ID: ${supplierId}`);
+      }
     });
     
     const [product, supplier, supplierProduct] = await Promise.all([
@@ -203,7 +233,9 @@ async function restockSupplierProduct(req, res) {
     res.json({ success: true, product, supplier, supplier_product: supplierProduct });
   } catch (e) {
     console.error('Error in restockSupplierProduct:', e);
-    res.status(500).json({ message: 'Server error' });
+    const errorMessage = e.message || 'Server error';
+    const statusCode = e.message && e.message.includes('not found') ? 404 : 500;
+    res.status(statusCode).json({ message: errorMessage, error: process.env.NODE_ENV === 'development' ? e.stack : undefined });
   } finally {
     if (session) {
       await session.endSession();
