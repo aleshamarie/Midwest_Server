@@ -470,8 +470,19 @@ async function getSalesByDate(req, res) {
     const next = new Date(d);
     next.setDate(next.getDate() + 1);
 
+    // Get current date summary
     const summary = await SalesDailySummary.findOne({
       summary_date: { $gte: d, $lt: next }
+    }).lean();
+
+    // Get previous day summary for comparison
+    const prevDay = new Date(d);
+    prevDay.setDate(prevDay.getDate() - 1);
+    const prevDayNext = new Date(prevDay);
+    prevDayNext.setDate(prevDayNext.getDate() + 1);
+
+    const prevSummary = await SalesDailySummary.findOne({
+      summary_date: { $gte: prevDay, $lt: prevDayNext }
     }).lean();
 
     const rows = summary ? [{
@@ -486,10 +497,23 @@ async function getSalesByDate(req, res) {
       taxes: Number(summary.taxes || 0)
     }] : [];
 
+    // Include previous day data for comparison
+    const previousDay = prevSummary ? {
+      gross_sales: Number(prevSummary.gross_sales || 0),
+      refunds: Number(prevSummary.refunds || 0),
+      discounts: Number(prevSummary.discounts || 0),
+      net_sales: Number(prevSummary.net_sales || 0),
+      cost_of_goods: Number(prevSummary.cost_of_goods || 0),
+      gross_profit: Number(prevSummary.gross_profit || 0),
+      margin_percent: Number(prevSummary.margin_percent || 0),
+      taxes: Number(prevSummary.taxes || 0)
+    } : null;
+
     res.json({
       date: d.toISOString().slice(0, 10),
       total: rows.length,
-      rows
+      rows,
+      previousDay
     });
   } catch (error) {
     console.error('Error in getSalesByDate:', error);
