@@ -14,7 +14,8 @@ const {
   getProductImagePlaceholder,
   getProductThumbnail,
   getAllProductsLazy,
-  getLowStockItems
+  getLowStockItems,
+  scanProduct
 } = require('../controllers/productsController');
 const { 
   uploadImage,
@@ -36,6 +37,7 @@ router.get('/lazy', authRequired, getAllProductsLazy);
 router.get('/lazy/public', getAllProductsLazy);
 router.get('/low-stock', authRequired, getLowStockItems);
 router.get('/low-stock/public', getLowStockItems);
+router.post('/scan', authRequired, scanProduct);
 router.get('/:id', authRequired, getProduct);
 router.get('/:id/image', authRequired, getProductImage);
 router.get('/:id/image/placeholder', authRequired, getProductImagePlaceholder);

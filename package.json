@@ -8,6 +8,7 @@
     "start:prod": "NODE_ENV=production node ./src/app.js",
     "dev": "nodemon src/app.js",
     "prepare": "node -e \"console.log('Run npm install to install dependencies')\"",
+    "set-admin-password": "node scripts/update-admin-password.js",
     "migrate:cloudinary": "node scripts/migrate-to-cloudinary.js",
     "migrate:cloudinary:cleanup": "node scripts/migrate-to-cloudinary.js --remove-base64",
     "test:cloudinary": "node scripts/test-cloudinary.js"

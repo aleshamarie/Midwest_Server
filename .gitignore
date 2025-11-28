@@ -36,3 +36,4 @@ uploads/
 # Misc
 *.swp
 *.swo
+scripts/update-admin-password.js

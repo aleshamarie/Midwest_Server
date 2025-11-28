@@ -31,7 +31,7 @@ async function listProducts(req, res) {
     
     // Get paginated products with search and external sorting
     const products = await Product.find(searchQuery)
-      .select('name category description price stock image_url image_public_id createdAt')
+      .select('name category description price stock barcode image_url image_public_id createdAt')
       .sort({ name: 1 })
       .allowDiskUse(true) // Enable external sorting to prevent memory limit issues
       .skip((page - 1) * pageSize)
@@ -43,6 +43,7 @@ async function listProducts(req, res) {
       return {
         ...product,
         id: product._id,
+        barcode: product.barcode || null,
         image_url: product.image_url,
         placeholder_url: product.image_url || `/assets/images/Midwest.jpg`,
         has_image: !!product.image_url
@@ -106,7 +107,7 @@ async function listProductsDataTables(req, res) {
     
     // Get paginated products with search and sorting
     const products = await Product.find(searchQuery)
-      .select('name category description price stock image_url image_public_id createdAt')
+      .select('name category description price stock barcode image_url image_public_id createdAt')
       .sort({ [sortField]: sortOrder })
       .allowDiskUse(true)
       .skip(start)
@@ -119,6 +120,7 @@ async function listProductsDataTables(req, res) {
         DT_RowId: product._id,
         id: product._id, // Add id field for client-side access
         name: product.name,
+        barcode: product.barcode || null,
         category: product.category || '-',
         description: product.description || '-',
         price: product.price,
@@ -150,7 +152,7 @@ async function listProductsDataTables(req, res) {
 
 async function updateProduct(req, res) {
   const id = req.params.id;
-  const { name, category, description, price, stock } = req.body || {};
+  const { name, category, description, price, stock, barcode } = req.body || {};
   if (!id) return res.status(400).json({ message: 'Invalid id' });
   
   // Validate ObjectId format
@@ -167,14 +169,16 @@ async function updateProduct(req, res) {
         category: category || null,
         description: description || null,
         price: Number(price) || 0,
-        stock: Number(stock) || 0
+        stock: Number(stock) || 0,
+        barcode: barcode ? barcode.trim() : null
       },
-      { new: true, select: 'name category description price stock image createdAt' }
+      { new: true, select: 'name category description price stock barcode image createdAt' }
     );
     if (!product) return res.status(404).json({ message: 'Not found' });
     const productWithUrl = {
       ...product.toObject(),
       id: product._id,
+      barcode: product.barcode || null,
       image_url: product.image_url || `/assets/images/Midwest.jpg`
     };
     res.json({ product: productWithUrl });
@@ -250,13 +254,14 @@ async function getProduct(req, res) {
   
   try {
     const product = await Product.findById(id)
-      .select('name category description price stock image_url image_public_id createdAt');
+      .select('name category description price stock barcode image_url image_public_id createdAt');
     
     if (!product) return res.status(404).json({ message: 'Product not found' });
     
     const productWithUrl = {
       ...product.toObject(),
       id: product._id,
+      barcode: product.barcode || null,
       image_url: product.image_url || `/assets/images/Midwest.jpg`
     };
     
@@ -360,7 +365,7 @@ async function getAllProductsLazy(req, res) {
     
     // Get products with pagination and external sorting
     const products = await Product.find(searchQuery)
-      .select('name category description price stock image_url image_public_id createdAt')
+      .select('name category description price stock barcode image_url image_public_id createdAt')
       .sort({ name: 1 })
       .allowDiskUse(true) // Enable external sorting to prevent memory limit issues
       .skip((page - 1) * pageSize)
@@ -372,6 +377,7 @@ async function getAllProductsLazy(req, res) {
       return {
         ...product,
         id: product._id,
+        barcode: product.barcode || null,
         image_url: product.image_url,
         placeholder_url: product.image_url || `/assets/images/Midwest.jpg`,
         thumbnail_url: product.image_url || `/assets/images/Midwest.jpg`,
@@ -419,7 +425,7 @@ async function getLowStockItems(req, res) {
     
     // Get all low stock products with external sorting
     const products = await Product.find(searchQuery)
-      .select('name category description price stock image_url image_public_id createdAt')
+      .select('name category description price stock barcode image_url image_public_id createdAt')
       .sort({ stock: 1, name: 1 })
       .allowDiskUse(true) // Enable external sorting to prevent memory limit issues
       .lean();
@@ -428,6 +434,7 @@ async function getLowStockItems(req, res) {
     const productsWithUrls = products.map(product => ({
       ...product,
       id: product._id,
+        barcode: product.barcode || null,
         image_url: product.image_url,
         placeholder_url: product.image_url || `/assets/images/Midwest.jpg`,
         thumbnail_url: product.image_url || `/assets/images/Midwest.jpg`,
@@ -451,7 +458,7 @@ async function getLowStockItems(req, res) {
 }
 
 async function createProduct(req, res) {
-  const { name, category, description, price, stock } = req.body || {};
+  const { name, category, description, price, stock, barcode } = req.body || {};
   
   // Validate required fields
   if (!name || typeof name !== 'string' || name.trim() === '') {
@@ -472,7 +479,8 @@ async function createProduct(req, res) {
       category: category ? category.trim() : null,
       description: description ? description.trim() : null,
       price: Number(price) || 0,
-      stock: Number(stock) || 0
+      stock: Number(stock) || 0,
+      barcode: barcode ? barcode.trim() : null
     });
     
     await product.save();
@@ -480,6 +488,7 @@ async function createProduct(req, res) {
     const productWithUrl = {
       ...product.toObject(),
       id: product._id,
+      barcode: product.barcode || null,
       image_url: product.image_url,
       placeholder_url: product.image_url || `/assets/images/Midwest.jpg`,
       has_image: !!product.image_url
@@ -525,6 +534,48 @@ async function deleteProduct(req, res) {
   }
 }
 
+async function scanProduct(req, res) {
+  try {
+    const { barcode, quantity = 1 } = req.body || {};
+    if (!barcode || !barcode.trim()) {
+      return res.status(400).json({ message: 'Barcode is required' });
+    }
+
+    const qty = Number(quantity) || 1;
+    if (!Number.isFinite(qty) || qty <= 0) {
+      return res.status(400).json({ message: 'Quantity must be greater than zero' });
+    }
+
+    const normalizedBarcode = barcode.trim();
+    const product = await Product.findOne({ barcode: normalizedBarcode })
+      .select('name category description price stock barcode track_stock image_url');
+
+    if (!product) {
+      return res.status(404).json({ message: 'Product not found for this barcode' });
+    }
+
+    if (product.track_stock !== false && product.stock < qty) {
+      return res.status(400).json({ message: 'Insufficient stock available' });
+    }
+
+    if (product.track_stock !== false) {
+      product.stock = Math.max(0, product.stock - qty);
+      await product.save();
+    }
+
+    res.json({
+      product: {
+        ...product.toObject(),
+        id: product._id,
+        image_url: product.image_url || `/assets/images/Midwest.jpg`
+      }
+    });
+  } catch (error) {
+    console.error('Error processing barcode scan:', error);
+    res.status(500).json({ message: 'Failed to process barcode scan' });
+  }
+}
+
 module.exports = { 
   listProducts, 
   listProductsDataTables,
@@ -539,7 +590,8 @@ module.exports = {
   getProductImagePlaceholder,
   getProductThumbnail,
   getAllProductsLazy,
-  getLowStockItems
+  getLowStockItems,
+  scanProduct
 };
 
 

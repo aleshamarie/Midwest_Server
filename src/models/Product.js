@@ -80,6 +80,9 @@ productSchema.index({ name: 1 });
 // Compound index for sorting by name with stock filtering
 productSchema.index({ stock: 1, name: 1 });
 
+// Index barcode for fast scans; sparse+unique keeps optional field deduped
+productSchema.index({ barcode: 1 }, { unique: true, sparse: true });
+
 // Pre-save hook to calculate Dart hash
 productSchema.pre('save', function(next) {
   if (this.isNew || this.isModified('_id')) {
