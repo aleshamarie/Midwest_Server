@@ -41,6 +41,7 @@ router.get('/lazy/public', getAllProductsLazy);
 router.get('/low-stock', authRequired, getLowStockItems);
 router.get('/low-stock/public', getLowStockItems);
 router.post('/scan', authRequired, scanProduct);
+router.post('/search-barcode/public', searchProductByBarcode);
 router.post('/search-barcode', authRequired, searchProductByBarcode);
 router.post('/batch-scan', authRequired, batchProcessScans);
 router.get('/:id', authRequired, getProduct);

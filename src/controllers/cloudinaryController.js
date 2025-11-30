@@ -11,15 +11,36 @@ const upload = multer({
     fileSize: 5 * 1024 * 1024 // 5MB limit
   },
   fileFilter: (req, file, cb) => {
-    const allowedTypes = /jpeg|jpg|png|gif|webp/;
-    const extname = allowedTypes.test(file.originalname.toLowerCase());
-    const mimetype = allowedTypes.test(file.mimetype);
-
-    if (mimetype && extname) {
+    // Check mimetype - should start with 'image/' and be one of the allowed types
+    // Note: JPEG mimetype is 'image/jpeg', not 'image/jpg'
+    const allowedMimeTypes = /^image\/(jpeg|png|gif|webp)$/i;
+    const isValidMimeType = file.mimetype && allowedMimeTypes.test(file.mimetype);
+    
+    // Check extension (optional - for files with proper filenames)
+    // Accept both .jpeg and .jpg extensions
+    const allowedExtensions = /\.(jpeg|jpg|png|gif|webp)$/i;
+    const hasValidExtension = file.originalname && allowedExtensions.test(file.originalname);
+    
+    // Accept if mimetype is valid (primary check)
+    // This allows blob uploads without proper filenames
+    if (isValidMimeType) {
       return cb(null, true);
-    } else {
-      cb(new Error('Only image files (jpeg, jpg, png, gif, webp) are allowed!'));
     }
+    
+    // Fallback: if extension is valid but mimetype is missing/incorrect, still accept
+    // (some clients might not set mimetype correctly, especially for blob uploads)
+    if (hasValidExtension) {
+      return cb(null, true);
+    }
+    
+    // If no originalname (blob upload), be more lenient - accept if mimetype starts with 'image/'
+    // This handles edge cases where mimetype might be set but not matching our exact pattern
+    if (!file.originalname && file.mimetype && file.mimetype.startsWith('image/')) {
+      return cb(null, true);
+    }
+    
+    // Reject if none of the above conditions are met
+    cb(new Error('Only image files (jpeg, jpg, png, gif, webp) are allowed!'));
   }
 });
 

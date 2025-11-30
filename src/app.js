@@ -96,9 +96,48 @@ const startServer = async () => {
             
             // Calculate cost of goods from order items
             for (const item of orderItems) {
-              if (item.product_id && item.product_id.cost) {
-                costOfGoods += item.quantity * item.product_id.cost;
+              if (!item.product_id) continue;
+              
+              let itemCost = 0;
+              
+              // Check if product has variants and if this item has a variant
+              if (item.product_id.variants && Array.isArray(item.product_id.variants) && item.product_id.variants.length > 0) {
+                // Try to find matching variant by variant_id if stored, or by variant_name
+                let matchingVariant = null;
+                
+                if (item.variant_id) {
+                  // Find variant by _id (handle both ObjectId and string)
+                  const variantIdStr = item.variant_id.toString ? item.variant_id.toString() : String(item.variant_id);
+                  matchingVariant = item.product_id.variants.find(v => 
+                    v._id && (v._id.toString() === variantIdStr || String(v._id) === variantIdStr)
+                  );
+                } else if (item.variant_name) {
+                  // Find variant by name
+                  matchingVariant = item.product_id.variants.find(v => 
+                    v.name && v.name === item.variant_name
+                  );
+                } else if (item.product_name && item.product_name.includes(' - ')) {
+                  // Try to extract variant name from product_name (format: "Product Name - Variant Name")
+                  const variantName = item.product_name.split(' - ')[1];
+                  if (variantName) {
+                    matchingVariant = item.product_id.variants.find(v => 
+                      v.name && v.name === variantName
+                    );
+                  }
+                }
+                
+                // Use variant cost if found, otherwise use product cost
+                if (matchingVariant && matchingVariant.cost !== undefined && matchingVariant.cost !== null) {
+                  itemCost = matchingVariant.cost;
+                } else {
+                  itemCost = item.product_id.cost || 0;
+                }
+              } else {
+                // No variants, use product cost
+                itemCost = item.product_id.cost || 0;
               }
+              
+              costOfGoods += item.quantity * itemCost;
             }
             
             const netSales = grossSales - discounts - refunds;

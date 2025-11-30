@@ -421,13 +421,29 @@ async function createOrder(req, res) {
           productName = 'Unknown Product';
         }
 
+        // Extract variant information if provided
+        const variantId = it.variant_id || it.variantId || null;
+        const variantName = it.variant_name || it.variantName || null;
+        
+        // If variant_id is provided, validate it
+        let validVariantId = null;
+        if (variantId) {
+          if (mongoose.Types.ObjectId.isValid(variantId)) {
+            validVariantId = new mongoose.Types.ObjectId(variantId);
+          } else {
+            console.warn(`Invalid variant_id format: ${variantId}`);
+          }
+        }
+
         const orderItem = {
           order_id: order._id,
           product_id: validProductId,
           quantity,
           unit_price: unitPrice,
           total_price: itemTotalPrice,
-          product_name: productName
+          product_name: productName,
+          variant_id: validVariantId,
+          variant_name: variantName
         };
         
         console.log('Created order item:', JSON.stringify(orderItem, null, 2));

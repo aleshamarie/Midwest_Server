@@ -169,55 +169,84 @@ async function updateProduct(req, res) {
       category: category || null,
       description: description || null
     };
+    const unsetData = {}; // Fields to unset (for sparse index compatibility)
 
     // If variants are provided, use them; otherwise use legacy fields
     if (variants && Array.isArray(variants) && variants.length > 0) {
       // Validate variants
-      const validatedVariants = variants.map(variant => {
-        if (variant.price === undefined || variant.price === null) {
-          throw new Error('Variant price is required');
-        }
-        if (variant.stock === undefined || variant.stock === null) {
-          throw new Error('Variant stock is required');
-        }
-        return {
-          _id: variant._id || new mongoose.Types.ObjectId(),
-          name: variant.name ? variant.name.trim() : null,
-          sku: variant.sku ? variant.sku.trim() : null,
-          price: Number(variant.price) || 0,
-          cost: Number(variant.cost) || 0,
-          stock: Number(variant.stock) || 0,
-          barcodes: Array.isArray(variant.barcodes) 
-            ? variant.barcodes.map(b => b ? b.trim() : '').filter(b => b)
-            : [],
-          option1_name: variant.option1_name ? variant.option1_name.trim() : null,
-          option1_value: variant.option1_value ? variant.option1_value.trim() : null,
-          option2_name: variant.option2_name ? variant.option2_name.trim() : null,
-          option2_value: variant.option2_value ? variant.option2_value.trim() : null,
-          option3_name: variant.option3_name ? variant.option3_name.trim() : null,
-          option3_value: variant.option3_value ? variant.option3_value.trim() : null,
-          track_stock: variant.track_stock !== undefined ? variant.track_stock : true,
-          available_for_sale: variant.available_for_sale !== undefined ? variant.available_for_sale : true,
-          low_stock_threshold: Number(variant.low_stock_threshold) || 5
-        };
-      });
-      updateData.variants = validatedVariants;
-      // Calculate aggregate price and stock from variants
-      updateData.price = validatedVariants.reduce((sum, v) => sum + (v.price || 0), 0) / validatedVariants.length;
-      updateData.stock = validatedVariants.reduce((sum, v) => sum + (v.stock || 0), 0);
-      updateData.barcode = null; // Clear legacy barcode when using variants
+      try {
+        const validatedVariants = variants.map((variant, index) => {
+          // Allow 0 as a valid value, but require the field to be present
+          const price = variant.price !== undefined && variant.price !== null ? Number(variant.price) : null;
+          const stock = variant.stock !== undefined && variant.stock !== null ? Number(variant.stock) : null;
+          
+          if (price === null) {
+            throw new Error(`Variant ${index + 1} (${variant.name || 'unnamed'}): price is required`);
+          }
+          if (stock === null) {
+            throw new Error(`Variant ${index + 1} (${variant.name || 'unnamed'}): stock is required`);
+          }
+          
+          return {
+            _id: variant._id || new mongoose.Types.ObjectId(),
+            name: variant.name ? variant.name.trim() : null,
+            sku: variant.sku ? variant.sku.trim() : null,
+            price: price,
+            cost: variant.cost !== undefined && variant.cost !== null ? Number(variant.cost) : 0,
+            stock: stock,
+            barcodes: Array.isArray(variant.barcodes) 
+              ? variant.barcodes.map(b => b ? b.trim() : '').filter(b => b)
+              : [],
+            option1_name: variant.option1_name ? variant.option1_name.trim() : null,
+            option1_value: variant.option1_value ? variant.option1_value.trim() : null,
+            option2_name: variant.option2_name ? variant.option2_name.trim() : null,
+            option2_value: variant.option2_value ? variant.option2_value.trim() : null,
+            option3_name: variant.option3_name ? variant.option3_name.trim() : null,
+            option3_value: variant.option3_value ? variant.option3_value.trim() : null,
+            track_stock: variant.track_stock !== undefined ? variant.track_stock : true,
+            available_for_sale: variant.available_for_sale !== undefined ? variant.available_for_sale : true,
+            low_stock_threshold: Number(variant.low_stock_threshold) || 5
+          };
+        });
+        updateData.variants = validatedVariants;
+        // Calculate aggregate price and stock from variants
+        updateData.price = validatedVariants.reduce((sum, v) => sum + (v.price || 0), 0) / validatedVariants.length;
+        updateData.stock = validatedVariants.reduce((sum, v) => sum + (v.stock || 0), 0);
+        // Unset barcode field instead of setting to null (for sparse index compatibility)
+        unsetData.barcode = '';
+      } catch (validationError) {
+        console.error('Variant validation error:', validationError);
+        return res.status(400).json({ 
+          message: validationError.message || 'Invalid variant data',
+          error: validationError.message 
+        });
+      }
     } else {
       // Legacy mode - single product without variants
       updateData.price = Number(price) || 0;
       updateData.stock = Number(stock) || 0;
-      updateData.barcode = barcode ? barcode.trim() : null;
+      // Only set barcode if it has a value; otherwise unset it (for sparse index compatibility)
+      const trimmedBarcode = barcode ? barcode.trim() : '';
+      if (trimmedBarcode) {
+        updateData.barcode = trimmedBarcode;
+      } else {
+        unsetData.barcode = '';
+      }
       updateData.variants = []; // Clear variants if not provided
     }
 
+    // Build the update query with $set for regular fields and $unset for fields to remove
+    const updateQuery = { $set: updateData };
+    if (Object.keys(unsetData).length > 0) {
+      updateQuery.$unset = unsetData;
+    }
+
+    console.log('Update query:', JSON.stringify(updateQuery, null, 2));
+    
     const product = await Product.findByIdAndUpdate(
       id,
-      updateData,
-      { new: true }
+      updateQuery,
+      { new: true, runValidators: true }
     );
     if (!product) return res.status(404).json({ message: 'Not found' });
     const productWithUrl = {
@@ -566,7 +595,13 @@ async function createProduct(req, res) {
       }
       productData.price = Number(price) || 0;
       productData.stock = Number(stock) || 0;
-      productData.barcode = barcode ? barcode.trim() : null;
+      // Only set barcode if it has a value (for sparse index compatibility)
+      // Don't set to null - leave undefined so sparse index ignores it
+      const trimmedBarcode = barcode ? barcode.trim() : '';
+      if (trimmedBarcode) {
+        productData.barcode = trimmedBarcode;
+      }
+      // If barcode is empty, don't set it at all (undefined) so sparse index ignores it
     }
     
     const product = new Product(productData);

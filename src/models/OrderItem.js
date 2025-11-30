@@ -40,6 +40,17 @@ const orderItemSchema = new mongoose.Schema({
   },
   product_sku: String,
   product_category: String,
+  variant_id: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Product.variants',
+    required: false,
+    index: true
+  },
+  variant_name: {
+    type: String,
+    trim: true,
+    required: false
+  },
   created_at: {
     type: Date,
     default: Date.now
