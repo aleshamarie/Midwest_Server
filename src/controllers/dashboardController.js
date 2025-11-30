@@ -111,8 +111,8 @@ async function getSalesOverview(_req, res) {
           if (i === 0) { // Today
             result.push({
               day: key,
-              online: Number(mostRecent.net_sales || 0),
-              instore: 0
+              online: Number(mostRecent.online_sales || 0),
+              instore: Number(mostRecent.instore_sales || 0)
             });
           } else {
             result.push({
@@ -155,17 +155,15 @@ async function getSalesOverview(_req, res) {
       console.log('Processing day:', key, 'Found item:', !!item);
       
       if (item) {
-        // Use net_sales from the summary (this represents total sales for the day)
-        // For now, we'll show all sales as "online" since the summary doesn't distinguish
-        // In the future, you could modify the summary to track online vs in-store separately
+        // Use online_sales and instore_sales from the summary
         result.push({ 
           day: key, 
-          online: Number(item.net_sales || 0), 
-          instore: 0 // Set to 0 since we don't have separate tracking in the summary
+          online: Number(item.online_sales || 0), 
+          instore: Number(item.instore_sales || 0)
         });
       } else {
-      result.push({ 
-        day: key, 
+        result.push({ 
+          day: key, 
           online: 0, 
           instore: 0 
         });
@@ -183,8 +181,8 @@ async function getSalesOverview(_req, res) {
       if (dateIndex !== -1) {
         result[dateIndex] = {
           day: recentDate,
-          online: Number(mostRecent.net_sales || 0),
-          instore: 0
+          online: Number(mostRecent.online_sales || 0),
+          instore: Number(mostRecent.instore_sales || 0)
         };
         console.log('Updated result with most recent data:', result[dateIndex]);
       }
@@ -245,6 +243,20 @@ async function aggregateSalesData(_req, res) {
       const discounts = dayData.total_discounts || 0;
       const refunds = 0; // Assuming no refunds for now
       const netSales = grossSales - discounts - refunds;
+      
+      // Calculate online vs in-store sales
+      let onlineSales = 0;
+      let instoreSales = 0;
+      
+      for (const order of dayData.orders) {
+        const orderNetTotal = (order.net_total || order.totalPrice || 0) - (order.discount || 0);
+        if (order.type === 'In-Store') {
+          instoreSales += orderNetTotal;
+        } else {
+          onlineSales += orderNetTotal;
+        }
+      }
+      
       const grossProfit = netSales - costOfGoods;
       const marginPercent = netSales === 0 ? 0 : (grossProfit / netSales) * 100;
       
@@ -255,6 +267,8 @@ async function aggregateSalesData(_req, res) {
         refunds: refunds,
         discounts: discounts,
         net_sales: netSales,
+        online_sales: onlineSales,
+        instore_sales: instoreSales,
         cost_of_goods: costOfGoods,
         gross_profit: grossProfit,
         margin_percent: marginPercent,
@@ -351,10 +365,20 @@ async function manualAggregateToday(_req, res) {
     let discounts = 0;
     let costOfGoods = 0;
     let taxes = 0;
+    let onlineSales = 0;
+    let instoreSales = 0;
     
     for (const order of orders) {
       grossSales += order.totalPrice;
       discounts += order.discount;
+      
+      // Calculate online vs in-store sales
+      const orderNetTotal = (order.net_total || order.totalPrice || 0) - (order.discount || 0);
+      if (order.type === 'In-Store') {
+        instoreSales += orderNetTotal;
+      } else {
+        onlineSales += orderNetTotal;
+      }
     }
     
     // Calculate cost of goods from order items
@@ -377,6 +401,8 @@ async function manualAggregateToday(_req, res) {
         refunds: refunds,
         discounts: discounts,
         net_sales: netSales,
+        online_sales: onlineSales,
+        instore_sales: instoreSales,
         cost_of_goods: costOfGoods,
         gross_profit: grossProfit,
         margin_percent: marginPercent,

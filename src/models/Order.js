@@ -45,7 +45,9 @@ const orderSchema = new mongoose.Schema({
     min: 0
   },
   device_id: String,
-  fcm_token: String
+  fcm_token: String,
+  payment_proof_image_url: String, // Cloudinary URL for GCash payment proof
+  payment_proof_public_id: String // Cloudinary public ID for payment proof image management
 }, {
   timestamps: true
 });

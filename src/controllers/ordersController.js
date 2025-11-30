@@ -2,6 +2,29 @@ const Order = require('../models/Order_Standalone');
 const OrderItem = require('../models/OrderItem');
 const Product = require('../models/Product');
 const mongoose = require('mongoose');
+const cloudinary = require('../config/cloudinary');
+const { Readable } = require('stream');
+const multer = require('multer');
+
+// Configure multer for memory storage (for Cloudinary)
+const storage = multer.memoryStorage();
+const upload = multer({
+  storage: storage,
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 5MB limit
+  },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = /jpeg|jpg|png|gif|webp/;
+    const extname = allowedTypes.test(file.originalname.toLowerCase());
+    const mimetype = allowedTypes.test(file.mimetype);
+
+    if (mimetype && extname) {
+      return cb(null, true);
+    } else {
+      cb(new Error('Only image files (jpeg, jpg, png, gif, webp) are allowed!'));
+    }
+  }
+});
 
 // Helper function to validate MongoDB ObjectId
 function isValidObjectId(id) {
@@ -25,7 +48,7 @@ async function listOrders(req, res) {
     
     // Get paginated orders
     const orders = await Order.find(filter)
-      .select('order_code name contact address status type payment ref totalPrice discount net_total device_id createdAt')
+      .select('order_code name contact address status type payment ref totalPrice discount net_total device_id createdAt payment_proof_image_url payment_proof_public_id')
       .sort({ _id: -1 })
       .skip((page - 1) * pageSize)
       .limit(pageSize)
@@ -46,7 +69,7 @@ async function listOrders(req, res) {
 async function updateOrderPayment(req, res) {
   try {
     const id = req.params.id;
-    const { payment, ref, status, device_id, fcm_token } = req.body || {};
+    const { payment, ref, status, device_id, fcm_token, payment_proof_image_url, payment_proof_public_id } = req.body || {};
 
     if (!id) return res.status(400).json({ message: 'Invalid id' });
     
@@ -84,6 +107,8 @@ async function updateOrderPayment(req, res) {
     if (typeof ref !== 'undefined') updateFields.ref = ref;
     if (typeof status !== 'undefined') updateFields.status = status;
     if (typeof fcm_token !== 'undefined') updateFields.fcm_token = fcm_token;
+    if (typeof payment_proof_image_url !== 'undefined') updateFields.payment_proof_image_url = payment_proof_image_url;
+    if (typeof payment_proof_public_id !== 'undefined') updateFields.payment_proof_public_id = payment_proof_public_id;
 
     if (Object.keys(updateFields).length === 0) {
       return res.status(400).json({ message: 'No update fields' });
@@ -213,7 +238,7 @@ async function updateOrderPayment(req, res) {
 
 async function createOrder(req, res) {
   try {
-    const { name, contact, address, payment, ref, totalPrice, discount, net_total, status, type, device_id, fcm_token, items = [] } = req.body || {};
+    const { name, contact, address, payment, ref, totalPrice, discount, net_total, status, type, device_id, fcm_token, items = [], payment_proof_image_url, payment_proof_public_id } = req.body || {};
 
     if (!name || typeof name !== 'string') {
       return res.status(400).json({ message: 'Name is required' });
@@ -261,7 +286,9 @@ async function createOrder(req, res) {
       status: status || 'Pending',
       type: type || 'Online',
       device_id,
-      fcm_token: fcm_token || null
+      fcm_token: fcm_token || null,
+      payment_proof_image_url: payment_proof_image_url || null,
+      payment_proof_public_id: payment_proof_public_id || null
     };
 
     // Create the order first
@@ -422,6 +449,7 @@ async function createOrder(req, res) {
     const orderResponse = {
       ...order.toObject(),
       id: order._id,
+      _id: order._id.toString(), // Ensure _id is included as string for mobile app
       inserted_items: insertedItems
     };
     
@@ -521,4 +549,139 @@ async function getOrderItems(req, res) {
   }
 }
 
-module.exports = { listOrders, updateOrderPayment, createOrder, getOrder, getOrderItems };
+async function uploadPaymentProof(req, res) {
+  try {
+    const orderId = req.params.id;
+    
+    if (!orderId) {
+      return res.status(400).json({ message: 'Order ID is required' });
+    }
+    
+    // Validate ObjectId format
+    if (!mongoose.Types.ObjectId.isValid(orderId)) {
+      console.error('Invalid order ID format:', orderId, 'Type:', typeof orderId);
+      return res.status(400).json({ message: 'Invalid order ID format', receivedId: orderId });
+    }
+    
+    if (!req.file) {
+      console.error('No file in request. Request body keys:', Object.keys(req.body || {}));
+      return res.status(400).json({ message: 'No image file provided' });
+    }
+    
+    console.log('File received:', {
+      originalname: req.file.originalname,
+      mimetype: req.file.mimetype,
+      size: req.file.size,
+      bufferLength: req.file.buffer ? req.file.buffer.length : 0
+    });
+
+    const maxSize = 5 * 1024 * 1024; // 5MB in bytes
+    if (req.file.size > maxSize) {
+      return res.status(400).json({
+        message: `Image file too large. Maximum size is 5MB. Current size: ${Math.round(req.file.size / 1024 / 1024 * 100) / 100}MB`
+      });
+    }
+
+    console.log('Uploading payment proof for order ID:', orderId);
+    // Check if order exists
+    const order = await Order.findById(orderId);
+    if (!order) {
+      console.error('Order not found with ID:', orderId);
+      return res.status(404).json({ message: 'Order not found', orderId: orderId });
+    }
+    console.log('Order found:', order.order_code);
+
+    // Delete old payment proof if exists
+    if (order.payment_proof_public_id) {
+      try {
+        await cloudinary.uploader.destroy(order.payment_proof_public_id);
+      } catch (deleteError) {
+        console.warn('Failed to delete old payment proof:', deleteError);
+      }
+    }
+
+    // Upload new image to Cloudinary using Promise wrapper
+    const uploadPromise = new Promise((resolve, reject) => {
+      const stream = cloudinary.uploader.upload_stream(
+        {
+          folder: 'midwest-grocery/orders/payment-proofs',
+          public_id: `order-${orderId}-${Date.now()}`,
+          transformation: [
+            { width: 1200, height: 1200, crop: 'limit', quality: 'auto' },
+            { fetch_format: 'auto' }
+          ]
+        },
+        (error, result) => {
+          if (error) {
+            console.error('Cloudinary upload error:', error);
+            reject(new Error(`Failed to upload image to Cloudinary: ${error.message}`));
+          } else {
+            resolve(result);
+          }
+        }
+      );
+
+      // Handle stream errors
+      stream.on('error', (streamError) => {
+        console.error('Stream error:', streamError);
+        reject(new Error(`Stream error: ${streamError.message}`));
+      });
+
+      // Pipe the file buffer to the stream
+      if (req.file.buffer) {
+        const bufferStream = new Readable();
+        bufferStream.push(req.file.buffer);
+        bufferStream.push(null);
+        bufferStream.pipe(stream);
+      } else {
+        reject(new Error('File buffer is missing'));
+      }
+    });
+
+    // Wait for upload to complete
+    const result = await uploadPromise;
+
+    // Update order with payment proof URL
+    const updatedOrder = await Order.findByIdAndUpdate(
+      orderId,
+      {
+        payment_proof_image_url: result.secure_url,
+        payment_proof_public_id: result.public_id
+      },
+      { new: true, select: 'order_code payment_proof_image_url payment_proof_public_id' }
+    );
+
+    if (!updatedOrder) {
+      // If database update fails, delete the uploaded image from Cloudinary
+      try {
+        await cloudinary.uploader.destroy(result.public_id);
+      } catch (destroyError) {
+        console.error('Failed to delete uploaded image from Cloudinary:', destroyError);
+      }
+      return res.status(500).json({ message: 'Failed to update order with payment proof URL' });
+    }
+
+    res.json({
+      message: 'Payment proof uploaded successfully',
+      order: {
+        id: updatedOrder._id,
+        order_code: updatedOrder.order_code,
+        payment_proof_image_url: updatedOrder.payment_proof_image_url,
+        has_payment_proof: !!updatedOrder.payment_proof_image_url
+      }
+    });
+    
+  } catch (error) {
+    console.error('Error uploading payment proof:', error);
+    console.error('Error stack:', error.stack);
+    if (!res.headersSent) {
+      res.status(500).json({ 
+        message: 'Server error', 
+        error: error.message,
+        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      });
+    }
+  }
+}
+
+module.exports = { listOrders, updateOrderPayment, createOrder, getOrder, getOrderItems, uploadPaymentProof };

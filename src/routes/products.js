@@ -15,7 +15,10 @@ const {
   getProductThumbnail,
   getAllProductsLazy,
   getLowStockItems,
-  scanProduct
+  scanProduct,
+  searchProductByBarcode,
+  batchProcessScans,
+  uploadVariantImage
 } = require('../controllers/productsController');
 const { 
   uploadImage,
@@ -38,6 +41,8 @@ router.get('/lazy/public', getAllProductsLazy);
 router.get('/low-stock', authRequired, getLowStockItems);
 router.get('/low-stock/public', getLowStockItems);
 router.post('/scan', authRequired, scanProduct);
+router.post('/search-barcode', authRequired, searchProductByBarcode);
+router.post('/batch-scan', authRequired, batchProcessScans);
 router.get('/:id', authRequired, getProduct);
 router.get('/:id/image', authRequired, getProductImage);
 router.get('/:id/image/placeholder', authRequired, getProductImagePlaceholder);
@@ -46,6 +51,7 @@ router.patch('/:id', authRequired, updateProduct);
 router.delete('/:id', authRequired, deleteProduct);
 router.post('/:id/image', authRequired, upload.single('image'), uploadImage);
 router.delete('/:id/image', authRequired, deleteImage);
+router.post('/:id/variants/:variantId/image', authRequired, upload.single('image'), uploadVariantImage);
 router.post('/cleanup-images', authRequired, cleanupOrphanedImages);
 
 // Migration endpoint for base64 images

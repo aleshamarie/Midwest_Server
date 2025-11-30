@@ -120,7 +120,7 @@ async function addSupplierProduct(req, res) {
 
 async function restockSupplierProduct(req, res) {
   const supplierId = req.params.id;
-  const { productId, qty, date } = req.body || {};
+  const { productId, qty, date, variantId } = req.body || {};
   
   // Validate input
   if (!supplierId || !productId) {
@@ -139,6 +139,9 @@ async function restockSupplierProduct(req, res) {
   if (!mongoose.Types.ObjectId.isValid(productId)) {
     return res.status(400).json({ message: 'Invalid product ID format' });
   }
+  if (variantId && !mongoose.Types.ObjectId.isValid(variantId)) {
+    return res.status(400).json({ message: 'Invalid variant ID format' });
+  }
   
   let session;
   try {
@@ -151,15 +154,31 @@ async function restockSupplierProduct(req, res) {
     }
     
     await session.withTransaction(async () => {
-      // Update product stock
-      const product = await Product.findByIdAndUpdate(
-        productId,
-        { $inc: { stock: quantity } },
-        { new: true, session }
-      );
+      // Find product first
+      const product = await Product.findById(productId).session(session);
       
       if (!product) {
         throw new Error(`Product not found with ID: ${productId}`);
+      }
+      
+      // If variantId is provided, update variant stock
+      if (variantId) {
+        const variant = product.variants.id(variantId);
+        if (!variant) {
+          throw new Error(`Variant not found with ID: ${variantId}`);
+        }
+        
+        // Update variant stock
+        variant.stock = (variant.stock || 0) + quantity;
+        
+        // Recalculate product aggregate stock from variants
+        product.stock = product.variants.reduce((sum, v) => sum + (v.stock || 0), 0);
+        
+        await product.save({ session });
+      } else {
+        // Update product stock (legacy mode)
+        product.stock = (product.stock || 0) + quantity;
+        await product.save({ session });
       }
       
       // Upsert SupplierProduct relationship and track restock stats
@@ -218,14 +237,32 @@ async function restockSupplierProduct(req, res) {
       }
     });
     
+    // Fetch updated product with variants if variant was restocked
+    const productSelect = variantId 
+      ? 'name category price stock variants' 
+      : 'name category price stock';
+    
     const [product, supplier, supplierProduct] = await Promise.all([
-      Product.findById(productId).select('name category price stock'),
+      Product.findById(productId).select(productSelect),
       Supplier.findById(supplierId).select('name contact last_delivery'),
       SupplierProduct.findOne({ supplier_id: supplierId, product_id: productId })
         .select('supplier_id product_id supplier_price supplier_cost total_orders total_quantity_ordered last_delivery_date last_order_date')
     ]);
     
-    res.json({ success: true, product, supplier, supplier_product: supplierProduct });
+    // Include variant info if variant was restocked
+    const response = { success: true, product, supplier, supplier_product: supplierProduct };
+    if (variantId && product && product.variants) {
+      const restockedVariant = product.variants.id(variantId);
+      if (restockedVariant) {
+        response.variant = {
+          _id: restockedVariant._id,
+          name: restockedVariant.name,
+          stock: restockedVariant.stock
+        };
+      }
+    }
+    
+    res.json(response);
   } catch (e) {
     console.error('Error in restockSupplierProduct:', e);
     const errorMessage = e.message || 'Server error';

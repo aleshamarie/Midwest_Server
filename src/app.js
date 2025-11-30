@@ -78,10 +78,20 @@ const startServer = async () => {
             let discounts = 0;
             let costOfGoods = 0;
             let taxes = 0;
+            let onlineSales = 0;
+            let instoreSales = 0;
             
             for (const order of orders) {
               grossSales += order.totalPrice;
               discounts += order.discount;
+              
+              // Calculate online vs in-store sales
+              const orderNetTotal = (order.net_total || order.totalPrice || 0) - (order.discount || 0);
+              if (order.type === 'In-Store') {
+                instoreSales += orderNetTotal;
+              } else {
+                onlineSales += orderNetTotal;
+              }
             }
             
             // Calculate cost of goods from order items
@@ -104,6 +114,8 @@ const startServer = async () => {
                 refunds: refunds,
                 discounts: discounts,
                 net_sales: netSales,
+                online_sales: onlineSales,
+                instore_sales: instoreSales,
                 cost_of_goods: costOfGoods,
                 gross_profit: grossProfit,
                 margin_percent: marginPercent,

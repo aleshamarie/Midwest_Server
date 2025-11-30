@@ -21,6 +21,14 @@ const salesDailySummarySchema = new mongoose.Schema({
     type: Number,
     default: 0.00
   },
+  online_sales: {
+    type: Number,
+    default: 0.00
+  },
+  instore_sales: {
+    type: Number,
+    default: 0.00
+  },
   cost_of_goods: {
     type: Number,
     default: 0.00

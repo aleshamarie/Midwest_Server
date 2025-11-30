@@ -1,5 +1,55 @@
 const mongoose = require('mongoose');
 
+// Variant schema for products
+const variantSchema = new mongoose.Schema({
+  name: {
+    type: String,
+    trim: true
+  },
+  sku: String,
+  price: {
+    type: Number,
+    required: true,
+    default: 0.00
+  },
+  cost: {
+    type: Number,
+    default: 0.00
+  },
+  stock: {
+    type: Number,
+    required: true,
+    default: 0
+  },
+  barcodes: [{
+    type: String,
+    trim: true
+  }],
+  option1_name: String,
+  option1_value: String,
+  option2_name: String,
+  option2_value: String,
+  option3_name: String,
+  option3_value: String,
+  track_stock: {
+    type: Boolean,
+    default: true
+  },
+  available_for_sale: {
+    type: Boolean,
+    default: true
+  },
+  low_stock_threshold: {
+    type: Number,
+    default: 5
+  },
+  image_url: String, // Cloudinary image URL for this variant
+  image_public_id: String // Cloudinary public ID for image management
+}, {
+  _id: true,
+  timestamps: false
+});
+
 const productSchema = new mongoose.Schema({
   handle: {
     type: String,
@@ -30,7 +80,7 @@ const productSchema = new mongoose.Schema({
     type: Number,
     default: 0.00
   },
-  barcode: String,
+  barcode: String, // Legacy field - kept for backward compatibility
   included_sku: String,
   included_qty: {
     type: Number,
@@ -46,12 +96,10 @@ const productSchema = new mongoose.Schema({
   },
   price: {
     type: Number,
-    required: true,
     default: 0.00
   },
   stock: {
     type: Number,
-    required: true,
     default: 0
   },
   low_stock_threshold: {
@@ -66,7 +114,9 @@ const productSchema = new mongoose.Schema({
   dart_hash: {
     type: Number,
     index: true
-  }
+  },
+  // Variants array - each variant has its own price, stock, and barcodes
+  variants: [variantSchema]
 }, {
   timestamps: true
 });
@@ -82,6 +132,9 @@ productSchema.index({ stock: 1, name: 1 });
 
 // Index barcode for fast scans; sparse+unique keeps optional field deduped
 productSchema.index({ barcode: 1 }, { unique: true, sparse: true });
+
+// Index for variant barcodes - allows searching barcodes within variants
+productSchema.index({ 'variants.barcodes': 1 }, { sparse: true });
 
 // Pre-save hook to calculate Dart hash
 productSchema.pre('save', function(next) {
