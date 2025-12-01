@@ -423,15 +423,65 @@ async function createOrder(req, res) {
 
         // Extract variant information if provided
         const variantId = it.variant_id || it.variantId || null;
-        const variantName = it.variant_name || it.variantName || null;
+        let variantName = it.variant_name || it.variantName || null;
         
-        // If variant_id is provided, validate it
+        // Clean up variant_name if it's empty string
+        if (variantName === '') variantName = null;
+        
+        console.log(`Processing variant - variant_id: ${variantId}, variant_name: ${variantName}`);
+        
+        // If variant_id is provided, validate it and fetch variant name if needed
         let validVariantId = null;
         if (variantId) {
           if (mongoose.Types.ObjectId.isValid(variantId)) {
             validVariantId = new mongoose.Types.ObjectId(variantId);
           } else {
-            console.warn(`Invalid variant_id format: ${variantId}`);
+            // Handle case where variant_id might be a string hash (from Flutter)
+            // Try to find variant by matching the hash or by name
+            console.log(`Variant ID ${variantId} is not a valid ObjectId, attempting to find variant in product`);
+          }
+          
+          // If variant_name is not provided or empty but variant_id is, fetch it from the product
+          if ((!variantName || variantName.trim() === '') && validProductId) {
+            try {
+              const product = await Product.findById(validProductId).select('variants');
+              if (product && product.variants && product.variants.length > 0) {
+                // Try to find variant by ObjectId match
+                let foundVariant = product.variants.find(v => 
+                  v._id && v._id.toString() === variantId.toString()
+                );
+                
+                // If not found by ObjectId, try to find by matching the variant_id as string
+                if (!foundVariant) {
+                  foundVariant = product.variants.find(v => 
+                    v._id && v._id.toString().includes(variantId.toString().substring(0, 8))
+                  );
+                }
+                
+                if (foundVariant) {
+                  // Get variant display name
+                  if (foundVariant.name) {
+                    variantName = foundVariant.name;
+                  } else {
+                    // Build name from option values
+                    const parts = [];
+                    if (foundVariant.option1_value) parts.push(foundVariant.option1_value);
+                    if (foundVariant.option2_value) parts.push(foundVariant.option2_value);
+                    if (foundVariant.option3_value) parts.push(foundVariant.option3_value);
+                    variantName = parts.length > 0 ? parts.join(' / ') : 'Default';
+                  }
+                  // Update validVariantId to the actual ObjectId
+                  if (foundVariant._id) {
+                    validVariantId = foundVariant._id;
+                  }
+                  console.log(`Found variant name: ${variantName} for variant_id: ${variantId}`);
+                } else {
+                  console.warn(`Variant not found in product for variant_id: ${variantId}`);
+                }
+              }
+            } catch (variantError) {
+              console.warn(`Error fetching variant name: ${variantError.message}`);
+            }
           }
         }
 
@@ -443,10 +493,11 @@ async function createOrder(req, res) {
           total_price: itemTotalPrice,
           product_name: productName,
           variant_id: validVariantId,
-          variant_name: variantName
+          variant_name: variantName || null  // Ensure null instead of empty string
         };
         
         console.log('Created order item:', JSON.stringify(orderItem, null, 2));
+        console.log(`Order item variant - variant_id: ${orderItem.variant_id}, variant_name: ${orderItem.variant_name}`);
         orderItems.push(orderItem);
       }
 
@@ -501,18 +552,24 @@ async function getOrder(req, res) {
       .lean();
 
     // Format items with product names
-    const formattedItems = items.map(item => ({
-      product_id: item.product_id._id,
-      name: item.product_name,
-      quantity: Number(item.quantity) || 0,
-      price: Number(item.unit_price) || 0,
-      total_price: Number(item.total_price) || 0,
-      product_details: {
-        name: item.product_id.name,
-        category: item.product_id.category,
-        price: item.product_id.price
-      }
-    }));
+    const formattedItems = items.map(item => {
+      const formatted = {
+        product_id: item.product_id._id,
+        name: item.product_name,
+        quantity: Number(item.quantity) || 0,
+        price: Number(item.unit_price) || 0,
+        total_price: Number(item.total_price) || 0,
+        variant_id: item.variant_id ? item.variant_id.toString() : null,
+        variant_name: item.variant_name || null,
+        product_details: {
+          name: item.product_id.name,
+          category: item.product_id.category,
+          price: item.product_id.price
+        }
+      };
+      console.log('Formatted order item:', JSON.stringify(formatted, null, 2));
+      return formatted;
+    });
 
     const orderResponse = {
       ...order,
@@ -559,6 +616,8 @@ async function getOrderItems(req, res) {
         quantity: Number(item.quantity) || 0,
         price: Number(item.unit_price) || 0,
         total_price: Number(item.total_price) || 0,
+        variant_id: item.variant_id ? item.variant_id.toString() : null,
+        variant_name: item.variant_name || null,
         product_details: {
           name: productName,
           category: productCategory,
