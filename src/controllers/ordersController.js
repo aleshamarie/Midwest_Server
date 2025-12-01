@@ -545,21 +545,29 @@ async function getOrderItems(req, res) {
       .populate('product_id', 'name category price')
       .lean();
 
-    const formattedItems = items.map((item, index) => ({
-      id: index + 1, // Use index as id for consistency
-      product_id: item.product_id._id,
-      name: item.product_name,
-      quantity: Number(item.quantity) || 0,
-      price: Number(item.unit_price) || 0,
-      total_price: Number(item.total_price) || 0,
-      product_details: {
-        name: item.product_id.name,
-        category: item.product_id.category,
-        price: item.product_id.price
-      }
-    }));
+    const formattedItems = items.map((item, index) => {
+      // Handle case where product_id might be null or not populated
+      const productId = item.product_id ? (item.product_id._id || item.product_id) : null;
+      const productName = item.product_id?.name || item.product_name || 'Unknown Product';
+      const productCategory = item.product_id?.category || null;
+      const productPrice = item.product_id?.price || item.unit_price || 0;
 
-    res.json({ items });
+      return {
+        id: index + 1, // Use index as id for consistency
+        product_id: productId,
+        name: item.product_name || productName,
+        quantity: Number(item.quantity) || 0,
+        price: Number(item.unit_price) || 0,
+        total_price: Number(item.total_price) || 0,
+        product_details: {
+          name: productName,
+          category: productCategory,
+          price: productPrice
+        }
+      };
+    });
+
+    res.json({ items: formattedItems });
   } catch (_e) {
     res.status(500).json({ message: 'Server error' });
   }
