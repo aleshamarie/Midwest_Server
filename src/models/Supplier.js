@@ -58,6 +58,8 @@ const supplierSchema = new mongoose.Schema({
   },
   // Delivery information
   last_delivery: Date,
+  // Last order date (tracks the most recent order placed with this supplier)
+  last_order_date: Date,
   delivery_lead_time: {
     type: Number,
     default: 7 // days

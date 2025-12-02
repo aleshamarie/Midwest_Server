@@ -15,6 +15,7 @@ async function listSuppliers(_req, res) {
       name: supplier.name,
       contact: supplier.contact,
       last_delivery: supplier.last_delivery,
+      last_order_date: supplier.last_order_date,
       created_at: supplier.createdAt,
       items: supplier.products ? supplier.products.map(p => p.name) : []
     }));
@@ -28,13 +29,20 @@ async function listSuppliers(_req, res) {
 
 
 async function createSupplier(req, res) {
-  const { name, contact = null, lastDelivery = null } = req.body || {};
+  const { name, contact = null, lastDelivery = null, lastOrderDate = null } = req.body || {};
   if (!name || !name.trim()) return res.status(400).json({ message: 'Name required' });
   try {
+    const parsedLastDelivery = lastDelivery ? new Date(lastDelivery) : null;
+    const parsedLastOrderDate = lastOrderDate
+      ? new Date(lastOrderDate)
+      // If no explicit last order date, fall back to last delivery (common case)
+      : parsedLastDelivery;
+
     const supplier = new Supplier({
       name: name.trim(),
       contact,
-      last_delivery: lastDelivery ? new Date(lastDelivery) : null
+      last_delivery: parsedLastDelivery,
+      last_order_date: parsedLastOrderDate
     });
     await supplier.save();
     
@@ -42,7 +50,8 @@ async function createSupplier(req, res) {
       id: supplier._id,
       name: supplier.name,
       contact: supplier.contact,
-      last_delivery: supplier.last_delivery,
+      last_delivery: supplier.last_delivery || null,
+      last_order_date: supplier.last_order_date || null,
       created_at: supplier.createdAt
     };
     
@@ -55,15 +64,22 @@ async function createSupplier(req, res) {
 
 async function updateSupplier(req, res) {
   const { id } = req.params;
-  const { name, contact = null, lastDelivery = null } = req.body || {};
+  const { name, contact = null, lastDelivery = null, lastOrderDate = null } = req.body || {};
   if (!name || !name.trim()) return res.status(400).json({ message: 'Name required' });
   try {
+    const parsedLastDelivery = lastDelivery ? new Date(lastDelivery) : null;
+    const parsedLastOrderDate = lastOrderDate
+      ? new Date(lastOrderDate)
+      // If no explicit last order date, fall back to last delivery (common case)
+      : parsedLastDelivery;
+
     const supplier = await Supplier.findByIdAndUpdate(
       id,
       {
         name: name.trim(),
         contact,
-        last_delivery: lastDelivery ? new Date(lastDelivery) : null
+        last_delivery: parsedLastDelivery,
+        last_order_date: parsedLastOrderDate
       },
       { new: true }
     );
@@ -74,7 +90,8 @@ async function updateSupplier(req, res) {
       id: supplier._id,
       name: supplier.name,
       contact: supplier.contact,
-      last_delivery: supplier.last_delivery,
+      last_delivery: supplier.last_delivery || null,
+      last_order_date: supplier.last_order_date || null,
       created_at: supplier.createdAt
     };
     
@@ -224,6 +241,7 @@ async function restockSupplierProduct(req, res) {
         supplierId,
         { 
           last_delivery: deliveryDate,
+          last_order_date: deliveryDate,
           $addToSet: { 
             products: productId,
             supplier_products: supplierProduct._id
@@ -244,7 +262,7 @@ async function restockSupplierProduct(req, res) {
     
     const [product, supplier, supplierProduct] = await Promise.all([
       Product.findById(productId).select(productSelect),
-      Supplier.findById(supplierId).select('name contact last_delivery'),
+      Supplier.findById(supplierId).select('name contact last_delivery last_order_date'),
       SupplierProduct.findOne({ supplier_id: supplierId, product_id: productId })
         .select('supplier_id product_id supplier_price supplier_cost total_orders total_quantity_ordered last_delivery_date last_order_date')
     ]);
