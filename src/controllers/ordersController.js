@@ -34,7 +34,7 @@ function isValidObjectId(id) {
 async function listOrders(req, res) {
   try {
     const page = Math.max(parseInt(req.query.page || '1'), 1);
-    const pageSize = Math.min(Math.max(parseInt(req.query.pageSize || '20'), 1), 100);
+    const pageSize = Math.min(Math.max(parseInt(req.query.pageSize || '20'), 1), 10000);
     const deviceId = req.query.device_id;
     
     // Build query filter
@@ -48,7 +48,7 @@ async function listOrders(req, res) {
     
     // Get paginated orders
     const orders = await Order.find(filter)
-      .select('order_code name contact address status type payment ref totalPrice discount net_total device_id createdAt payment_proof_image_url payment_proof_public_id')
+      .select('order_code name contact address status type payment ref totalPrice discount net_total cash_received device_id createdAt payment_proof_image_url payment_proof_public_id')
       .sort({ _id: -1 })
       .skip((page - 1) * pageSize)
       .limit(pageSize)
@@ -238,7 +238,7 @@ async function updateOrderPayment(req, res) {
 
 async function createOrder(req, res) {
   try {
-    const { name, contact, address, payment, ref, totalPrice, discount, net_total, status, type, device_id, fcm_token, items = [], payment_proof_image_url, payment_proof_public_id } = req.body || {};
+    const { name, contact, address, payment, ref, totalPrice, discount, net_total, status, type, device_id, fcm_token, items = [], payment_proof_image_url, payment_proof_public_id, cash_received } = req.body || {};
 
     if (!name || typeof name !== 'string') {
       return res.status(400).json({ message: 'Name is required' });
@@ -283,6 +283,7 @@ async function createOrder(req, res) {
       totalPrice,
       discount: discount || 0,
       net_total: net_total || totalPrice,
+      cash_received: cash_received || (payment === 'Cash' ? net_total || totalPrice : 0),
       status: status || 'Pending',
       type: type || 'Online',
       device_id,

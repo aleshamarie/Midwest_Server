@@ -37,3 +37,4 @@ uploads/
 *.swp
 *.swo
 scripts/update-admin-password.js
+scripts/delete-orders.js

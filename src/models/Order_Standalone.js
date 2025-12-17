@@ -48,6 +48,11 @@ const orderSchema = new mongoose.Schema({
     required: true,
     min: 0
   },
+  cash_received: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
   device_id: String,
   fcm_token: String,
   payment_proof_image_url: String, // Cloudinary URL for GCash payment proof
